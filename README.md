@@ -1,111 +1,156 @@
-# BALAGH | بلاغ — V2
+# BALAGH | بلاغ
 
-BALAGH is a local-first community issue triage and case-coordination prototype.
-It separates the **citizen reporting experience** from the **internal staff workflow** and uses AI as decision support rather than an autonomous authority.
+**BALAGH** is a local-first community issue triage and case-coordination prototype built with Python, CrewAI, Ollama, Streamlit, and SQLite.
 
-> **Core rule:** AI recommends → Human approves → System records.
+The system separates the **citizen reporting experience** from the **internal staff workflow** and follows a human-in-the-loop approach:
 
-## What changed in V2
+> **AI recommends → Human approves → System records.**
 
-- Separate `citizen_app.py` and `staff_app.py` applications.
-- Deterministic safety-sensitive triage remains in Python.
-- Two operational CrewAI agents instead of three review-only agents.
-- Agents receive read-only tools for case data, similar reports, and case history.
-- AI recommendations are stored separately from official case state.
-- A staff member must approve, modify, or reject an AI recommendation.
-- Every operational action is recorded in an auditable case history.
-- Presentation HTML and CSS are separated from Python behavior.
+## Overview
+
+Citizens can submit community reports such as:
+
+- Road and sidewalk issues
+- Waste and cleanliness problems
+- Street lighting and electrical issues
+- Water and drainage problems
+- Accessibility barriers
+- Public facility issues
+- Community disturbances
+
+Each report passes through deterministic triage before being stored and reviewed by staff.
+
+BALAGH can:
+
+1. Classify the issue.
+2. Assign an initial priority.
+3. Route the report to a service department.
+4. Detect potentially duplicated reports.
+5. Identify missing information.
+6. Store the report and its history.
+7. Generate AI-assisted recommendations.
+8. Require human review before operational decisions.
 
 ## Architecture
 
 ```text
 Citizen Portal
-    │
-    ▼
-Deterministic Triage (triage.py)
-    │
-    ├── classification
-    ├── priority
-    ├── routing
-    ├── missing information
-    └── duplicate detection
-    │
-    ▼
-SQLite (database.py)
-    │
-    ▼
+      │
+      ▼
+Deterministic Triage
+      │
+      ├── Classification
+      ├── Priority
+      ├── Routing
+      ├── Missing Information
+      └── Duplicate Detection
+      │
+      ▼
+SQLite
+      │
+      ▼
 Staff Portal
-    │
-    ├── Triage & Routing Agent
-    │      ├── GetCaseTool
-    │      └── FindSimilarReportsTool
-    │
-    └── Case Coordinator Agent
-           ├── GetCaseTool
-           └── GetCaseHistoryTool
-                  │
-                  ▼
-           AI Recommendation
-                  │
-                  ▼
-             Human Review
-        Approved / Modified / Rejected
-                  │
-                  ▼
-           Database + Audit Trail
+      │
+      ├── Triage & Routing Agent
+      └── Case Coordinator Agent
+              │
+              ▼
+       AI Recommendation
+              │
+              ▼
+         Human Review
+              │
+              ▼
+     Database + Audit Trail
 ```
 
-## Project structure
+## Agentic Workflow
+
+BALAGH uses two CrewAI agents.
+
+### Triage & Routing Agent
+
+Reviews the deterministic triage result and uses:
+
+- `GetCaseTool`
+- `FindSimilarReportsTool`
+
+### Case Coordinator Agent
+
+Recommends the next controlled action and uses:
+
+- `GetCaseTool`
+- `GetCaseHistoryTool`
+
+All agent tools are **read-only**.
+
+The agents cannot change report status, approve cases, or directly modify operational records.
+
+## Project Structure
 
 ```text
 BALAGH/
 ├── citizen_app.py
 ├── staff_app.py
-├── pyproject.toml
-├── uv.lock
-├── README.md
-├── .env.example
-├── .gitignore
-│
 ├── src/
 │   └── balagh/
-│       ├── __init__.py
 │       ├── triage.py
 │       ├── agents.py
 │       ├── tools.py
 │       ├── database.py
 │       └── auth.py
-│
 ├── ui/
 │   ├── citizen.html
 │   ├── staff.html
 │   └── style.css
-│
 ├── data/
 │   └── uploads/
-│       └── .gitkeep
-│
-├── docs/
-│   └── Project_Presentation.pptx
-│
-└── tests/
-    ├── test_triage.py
-    ├── test_database.py
-    └── test_workflow.py
+├── tests/
+│   ├── test_triage.py
+│   ├── test_database.py
+│   └── test_workflow.py
+├── pyproject.toml
+├── uv.lock
+└── .env.example
 ```
 
-## Requirements
+## Interfaces
 
-- Python 3.10–3.13
-- `uv`
+### Citizen Portal
+
+Citizens can:
+
+- Submit reports
+- Specify city, district, and landmark
+- Upload an optional image
+- Receive a tracking number
+- Check report status
+
+### Staff Portal
+
+Staff can:
+
+- View dashboard metrics
+- Filter reports
+- Review case details
+- Run AI-assisted analysis
+- Approve, modify, or reject recommendations
+- Update report status
+- Review case history
+
+## Technology Stack
+
+- Python
+- CrewAI
 - Ollama
-- Qwen3 4B Instruct (default)
+- Qwen3
+- Streamlit
+- SQLite
+- Pandas
+- HTML / CSS
+- uv
 
-Pull the local model:
-
-```powershell
-ollama pull qwen3:4b-instruct
-```
+## Setup
 
 Install dependencies:
 
@@ -113,13 +158,25 @@ Install dependencies:
 uv sync
 ```
 
-Create local environment configuration:
+Install the local model:
+
+```powershell
+ollama pull qwen3:4b-instruct
+```
+
+Create the environment file:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Change `STAFF_ACCESS_CODE` in `.env` before using the staff portal.
+Example configuration:
+
+```env
+MODEL=ollama/qwen3:4b-instruct
+OLLAMA_HOST=http://localhost:11434
+STAFF_ACCESS_CODE=your-access-code
+```
 
 ## Run
 
@@ -129,7 +186,7 @@ Citizen portal:
 uv run streamlit run citizen_app.py --server.port 8501
 ```
 
-Staff portal in another terminal:
+Staff portal:
 
 ```powershell
 uv run streamlit run staff_app.py --server.port 8502
@@ -141,21 +198,20 @@ uv run streamlit run staff_app.py --server.port 8502
 uv run python -m unittest discover -s tests -v
 ```
 
-The tests do not require Ollama. They test deterministic triage, persistence, and the human approval workflow without invoking an LLM.
+The current tests cover deterministic triage, SQLite persistence, duplicate similarity, and the human review workflow.
 
-## Existing V1 database
+The automated test suite does not currently invoke the local LLM.
 
-`database.py` performs additive SQLite migrations. If `data/balagh.db` from V1 already exists, BALAGH keeps the existing reports and adds the V2 tables/columns it needs.
+## Current Scope
 
-## Safety and security scope
+BALAGH is currently a prototype.
 
-BALAGH V2 is still a prototype, not a production government system.
+Current limitations include:
 
-- Critical safety detection is deterministic and does not rely on an LLM.
-- Agents are advisory and receive no database-write tools.
-- Staff authentication is a local prototype access code, not enterprise identity management.
-- SQLite is appropriate for the local MVP but not the intended final production datastore.
-- Uploaded images are stored but are not analyzed.
-- The current system does not validate geolocation against a map service.
-
-The existing V1 presentation should be moved to `docs/Project_Presentation.pptx` when this update is merged, then revised before V2 is presented externally.
+- Prototype staff authentication
+- Local SQLite storage
+- Local Ollama inference
+- No production identity or role-based access control
+- No external government-system integration
+- No map-based geolocation validation
+- Uploaded images are stored but not analyzed

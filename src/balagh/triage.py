@@ -253,7 +253,10 @@ def report_similarity(
     if first_city_norm != second_city_norm:
         return 0.0
 
-    location_score = 1.0 if first_district_norm == second_district_norm else 0.25
+    if first_district_norm != second_district_norm:
+        return 0.0
+
+    location_score = 1.0
 
     first_text = normalize_text(f"{first_title} {first_description}")
     second_text = normalize_text(f"{second_title} {second_description}")

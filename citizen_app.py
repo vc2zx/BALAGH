@@ -52,6 +52,18 @@ def _priority_ar(priority: str) -> str:
         "Critical": "حرجة",
     }.get(priority, priority)
 
+def _category_ar(category: str) -> str:
+    return {
+        "Roads & Sidewalks": "الطرق والأرصفة",
+        "Waste & Cleanliness": "النفايات والنظافة",
+        "Street Lighting & Electrical": "إنارة الشوارع والكهرباء",
+        "Water & Drainage": "المياه والصرف",
+        "Accessibility": "إمكانية الوصول",
+        "Public Facilities": "المرافق العامة",
+        "Noise & Community Disturbance": "الإزعاج والمخالفات المجتمعية",
+        "General Community Services": "الخدمات المجتمعية العامة",
+    }.get(category, category)
+
 
 def _status_class(status: str) -> str:
     return {
@@ -174,7 +186,7 @@ def main() -> None:
                     )
                 with c2:
                     st.markdown(
-                        _summary_card("التصنيف الأولي", result.category),
+                        _summary_card("التصنيف الأولي", _category_ar(result.category)),
                         unsafe_allow_html=True,
                     )
 
@@ -232,7 +244,7 @@ def main() -> None:
                             </div>
                             <div>
                                 <span>التصنيف</span>
-                                <strong>{escape(str(row['category']))}</strong>
+                                <strong>{escape(_category_ar(str(row['category'])))}</strong>
                             </div>
                         </div>
                     </div>

@@ -335,12 +335,34 @@ def save_agent_recommendation(
         raise ValueError(f"Report #{report_id} does not exist.")
 
     now = _now()
+
     with _connection() as connection:
+        pending = connection.execute(
+            """
+            SELECT id
+            FROM agent_recommendations
+            WHERE report_id = ?
+              AND decision = 'Pending'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (report_id,),
+        ).fetchone()
+
+        if pending is not None:
+            raise ValueError(
+                f"Report #{report_id} already has a pending AI recommendation."
+            )
+
         cursor = connection.execute(
             """
             INSERT INTO agent_recommendations (
-                report_id, created_at, triage_review, coordinator_review,
-                final_recommendation, decision
+                report_id,
+                created_at,
+                triage_review,
+                coordinator_review,
+                final_recommendation,
+                decision
             )
             VALUES (?, ?, ?, ?, ?, 'Pending')
             """,
@@ -352,17 +374,43 @@ def save_agent_recommendation(
                 final_recommendation,
             ),
         )
+
         recommendation_id = int(cursor.lastrowid)
+
         connection.execute(
             """
-            INSERT INTO case_history (report_id, created_at, actor, action, details)
+            INSERT INTO case_history (
+                report_id,
+                created_at,
+                actor,
+                action,
+                details
+            )
             VALUES (?, ?, 'AI', 'Recommendation generated', ?)
             """,
-            (report_id, now, f"Recommendation #{recommendation_id} created for human review."),
+            (
+                report_id,
+                now,
+                f"Recommendation #{recommendation_id} created for human review.",
+            ),
         )
+
         connection.commit()
         return recommendation_id
 
+
+def get_case_history(report_id: int) -> pd.DataFrame:
+    with _connection() as connection:
+        return pd.read_sql_query(
+            """
+            SELECT created_at, actor, action, details
+            FROM case_history
+            WHERE report_id = ?
+            ORDER BY id DESC
+            """,
+            connection,
+            params=(report_id,),
+        )
 
 def get_agent_recommendation(report_id: int) -> dict[str, Any] | None:
     with _connection() as connection:
@@ -376,6 +424,7 @@ def get_agent_recommendation(report_id: int) -> dict[str, Any] | None:
             """,
             (report_id,),
         ).fetchone()
+
     return dict(row) if row else None
 
 
@@ -387,8 +436,11 @@ def review_agent_recommendation(
 ) -> bool:
     if decision not in ALLOWED_REVIEW_DECISIONS:
         raise ValueError(f"Unsupported decision: {decision}")
+
     if decision == "Modified" and not reviewer_note.strip():
-        raise ValueError("A reviewer note is required when modifying a recommendation.")
+        raise ValueError(
+            "A reviewer note is required when modifying a recommendation."
+        )
 
     with _connection() as connection:
         recommendation = connection.execute(
@@ -399,32 +451,53 @@ def review_agent_recommendation(
             """,
             (recommendation_id,),
         ).fetchone()
+
         if recommendation is None:
             return False
+
         if recommendation["decision"] != "Pending":
-            raise ValueError("This recommendation has already been reviewed.")
+            raise ValueError(
+                "This recommendation has already been reviewed."
+            )
 
         now = _now()
+
         connection.execute(
             """
             UPDATE agent_recommendations
-            SET decision = ?, reviewer_note = ?, reviewed_at = ?
+            SET decision = ?,
+                reviewer_note = ?,
+                reviewed_at = ?
             WHERE id = ?
             """,
-            (decision, reviewer_note.strip(), now, recommendation_id),
+            (
+                decision,
+                reviewer_note.strip(),
+                now,
+                recommendation_id,
+            ),
         )
+
         connection.execute(
             """
-            INSERT INTO case_history (report_id, created_at, actor, action, details)
+            INSERT INTO case_history (
+                report_id,
+                created_at,
+                actor,
+                action,
+                details
+            )
             VALUES (?, ?, ?, 'AI recommendation reviewed', ?)
             """,
             (
                 int(recommendation["report_id"]),
                 now,
                 actor,
-                f"Decision: {decision}. Note: {reviewer_note.strip() or 'None'}",
+                f"Decision: {decision}. "
+                f"Note: {reviewer_note.strip() or 'None'}",
             ),
         )
+
         connection.commit()
         return True
 

@@ -62,6 +62,18 @@ class TriageTests(unittest.TestCase):
         )
         self.assertLess(score, 0.64)
 
+    def test_same_issue_different_district_is_not_duplicate(self) -> None:
+         score = report_similarity(
+            "حفرة كبيرة في الشارع",
+            "حفرة كبيرة تسبب انحراف السيارات منذ يومين",
+            "الرياض",
+            "الروابي",
+            "حفرة كبيرة في الشارع",
+            "حفرة كبيرة تسبب انحراف السيارات منذ يومين",
+            "الرياض",
+            "الملز",
+        )
+         self.assertEqual(score, 0.0)
 
 if __name__ == "__main__":
     unittest.main()

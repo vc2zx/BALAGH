@@ -167,6 +167,13 @@ def _dashboard() -> None:
         height=420,
     )
 
+def _status_class(status: str) -> str:
+    return {
+        "Open": "blue",
+        "In Progress": "amber",
+        "Resolved": "green",
+        "Closed": "gray",
+    }.get(status, "gray")
 
 def _reports_page() -> None:
     _page_header("البلاغات", "ابحث وصفِّ البلاغات قبل فتح الحالة ومراجعتها.")
@@ -254,7 +261,7 @@ def _case_review_page() -> None:
                     <h2>{escape(str(row['title']))}</h2>
                     <p>{escape(str(row['city']))}، {escape(str(row['district']))}</p>
                 </div>
-                <span class="status-pill blue">{escape(str(row['status']))}</span>
+                <span class="status-pill {_status_class(row['status'])}">{escape(str(row['status']))}</span>
             </div>
             """,
             unsafe_allow_html=True,
@@ -267,6 +274,21 @@ def _case_review_page() -> None:
     with details_tab:
         st.markdown("#### وصف البلاغ")
         st.write(row["description"])
+
+        attachment_path = row.get("attachment_path")
+
+    if attachment_path:
+        attachment = Path(attachment_path)
+
+    if attachment.exists():
+        st.markdown("#### الصورة المرفقة")
+        st.image(
+            str(attachment),
+            caption="الصورة المرفقة مع البلاغ",
+            use_container_width=True,
+        )
+    else:
+        st.warning("الصورة المرفقة بهذا البلاغ غير متوفرة محليًا.")
 
         c1, c2, c3 = st.columns(3)
         with c1:
