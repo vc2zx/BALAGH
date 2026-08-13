@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from balagh.core import (
-    ReportInput,
-    report_similarity,
-    triage_report,
-)
+from balagh.triage import ReportInput, report_similarity, triage_report
 
 
 class TriageTests(unittest.TestCase):
@@ -22,7 +18,7 @@ class TriageTests(unittest.TestCase):
         self.assertEqual(result.category, "Roads & Sidewalks")
         self.assertIn(result.priority, {"Medium", "High"})
 
-    def test_critical_warning(self) -> None:
+    def test_critical_warning_is_deterministic(self) -> None:
         report = ReportInput(
             title="سلك مكشوف",
             description="سلك كهرباء مكشوف بجوار الممر",
@@ -45,6 +41,26 @@ class TriageTests(unittest.TestCase):
             "الروابي",
         )
         self.assertGreater(score, 0.55)
+
+    def test_different_city_has_zero_similarity(self) -> None:
+        score = report_similarity(
+            "حفرة في الشارع", "حفرة كبيرة", "الرياض", "الروابي",
+            "حفرة في الشارع", "حفرة كبيرة", "جدة", "الروابي",
+        )
+        self.assertEqual(score, 0.0)
+
+    def test_unrelated_reports_same_district_are_not_duplicates(self) -> None:
+        score = report_similarity(
+            "حفرة كبيرة في الشارع",
+            "حفرة في الطريق تسبب انحراف السيارات منذ يومين",
+            "الرياض",
+            "الروابي",
+            "نفايات بجوار الحديقة",
+            "خمسة أكياس نفايات متراكمة قرب الحديقة منذ يوم",
+            "الرياض",
+            "الروابي",
+        )
+        self.assertLess(score, 0.64)
 
 
 if __name__ == "__main__":
