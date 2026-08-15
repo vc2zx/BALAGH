@@ -116,7 +116,11 @@ BALAGH/
 
 ## Interfaces
 
+
+
 ### Citizen Portal
+
+![Citizen Portal](docs/screenshots/citizen-portal.png)
 
 Citizens can:
 
@@ -127,6 +131,8 @@ Citizens can:
 - Check report status
 
 ### Staff Portal
+
+![Staff Dashboard](docs/screenshots/staff-dashboard.png)
 
 Staff can:
 
