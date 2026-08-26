@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}إرسال بلاغ | بلاغ{% endblock %}
+
+{% block content %}
+<section class="page-intro">
+    <p class="eyebrow">بوابة المواطن</p>
+    <h1>أرسل بلاغًا عن مشكلة في المرافق العامة</h1>
+    <p>اكتب وصفًا واضحًا وحدد الموقع قدر الإمكان. سيظهر لك رمز متابعة بعد الإرسال.</p>
+</section>
+
+{% if errors %}
+<section class="alert error" role="alert">
+    <h2>تعذر إرسال البلاغ</h2>
+    <ul>
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<form class="report-form" method="post" enctype="multipart/form-data" novalidate>
+    <div class="field full-width">
+        <label for="title">عنوان البلاغ</label>
+        <input id="title" name="title" maxlength="120" value="{{ values.title }}" placeholder="مثال: حفرة كبيرة في الشارع" required>
+    </div>
+
+    <div class="field full-width">
+        <label for="description">وصف المشكلة</label>
+        <textarea id="description" name="description" maxlength="3000" rows="6" placeholder="ما المشكلة؟ متى بدأت؟ وكيف تؤثر على المكان أو المارة؟" required>{{ values.description }}</textarea>
+    </div>
+
+    <div class="field">
+        <label for="city">المدينة</label>
+        <input id="city" name="city" value="{{ values.city }}" placeholder="الرياض" required>
+    </div>
+
+    <div class="field">
+        <label for="district">الحي</label>
+        <input id="district" name="district" value="{{ values.district }}" placeholder="الروابي" required>
+    </div>
+
+    <div class="field full-width">
+        <label for="landmark">الموقع أو معلم قريب <span>اختياري</span></label>
+        <input id="landmark" name="landmark" value="{{ values.landmark }}" placeholder="مثال: مقابل المدرسة أو بجوار الحديقة">
+    </div>
+
+    <div class="field full-width">
+        <label for="attachment">صورة للمشكلة <span>اختياري</span></label>
+        <input id="attachment" name="attachment" type="file" accept="image/jpeg,image/png,image/webp">
+        <small>JPG أو PNG أو WEBP وبحد أقصى 5 ميجابايت.</small>
+    </div>
+
+    <button class="primary-button full-width" type="submit">إرسال البلاغ</button>
+</form>
+{% endblock %}

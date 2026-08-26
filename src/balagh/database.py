@@ -79,13 +79,22 @@ def init_db() -> None:
                 acknowledgment TEXT NOT NULL,
                 emergency_warning TEXT,
                 language TEXT NOT NULL,
-                attachment_path TEXT
+                attachment_path TEXT,
+                tracking_token_hash TEXT
             )
             """
         )
 
         _ensure_column(connection, "reports", "updated_at", "TEXT")
         _ensure_column(connection, "reports", "attachment_path", "TEXT")
+        _ensure_column(connection, "reports", "tracking_token_hash", "TEXT")
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_tracking_token_hash
+            ON reports(tracking_token_hash)
+            WHERE tracking_token_hash IS NOT NULL
+            """
+        )
 
         connection.execute(
             """
@@ -142,6 +151,7 @@ def create_report(
     result: TriageResult,
     language: str = "Arabic",
     attachment_path: str | None = None,
+    tracking_token_hash: str | None = None,
 ) -> int:
     now = _now()
     with _connection() as connection:
@@ -151,9 +161,10 @@ def create_report(
                 created_at, updated_at, title, description, city, district,
                 landmark, category, priority, department, status,
                 duplicate_of, duplicate_score, reasoning, missing_information,
-                acknowledgment, emergency_warning, language, attachment_path
+                acknowledgment, emergency_warning, language, attachment_path,
+                tracking_token_hash
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 now,
@@ -174,6 +185,7 @@ def create_report(
                 result.emergency_warning,
                 language,
                 attachment_path,
+                tracking_token_hash,
             ),
         )
         report_id = int(cursor.lastrowid)
@@ -193,6 +205,19 @@ def get_report(report_id: int) -> dict[str, Any] | None:
         row = connection.execute(
             "SELECT * FROM reports WHERE id = ?",
             (report_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_report_by_tracking_hash(tracking_token_hash: str) -> dict[str, Any] | None:
+    """Return a report using its non-public tracking-token hash."""
+    if not tracking_token_hash:
+        return None
+
+    with _connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM reports WHERE tracking_token_hash = ?",
+            (tracking_token_hash,),
         ).fetchone()
     return dict(row) if row else None
 
@@ -398,19 +423,6 @@ def save_agent_recommendation(
         connection.commit()
         return recommendation_id
 
-
-def get_case_history(report_id: int) -> pd.DataFrame:
-    with _connection() as connection:
-        return pd.read_sql_query(
-            """
-            SELECT created_at, actor, action, details
-            FROM case_history
-            WHERE report_id = ?
-            ORDER BY id DESC
-            """,
-            connection,
-            params=(report_id,),
-        )
 
 def get_agent_recommendation(report_id: int) -> dict[str, Any] | None:
     with _connection() as connection:

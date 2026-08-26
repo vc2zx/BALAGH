@@ -1,223 +1,102 @@
 # BALAGH | بلاغ
 
-**BALAGH** is a local-first community issue triage and case-coordination prototype built with Python, CrewAI, Ollama, Streamlit, and SQLite.
+بلاغ مشروع محلي لاستقبال بلاغات المرافق العامة، فرزها أوليًا، ثم متابعتها من الموظف مع بقاء القرار النهائي للإنسان.
 
-The system separates the **citizen reporting experience** from the **internal staff workflow** and follows a human-in-the-loop approach:
+> الذكاء الاصطناعي يقترح، والموظف يراجع، والنظام يسجل.
 
-> **AI recommends → Human approves → System records.**
+## حالة التطوير
 
-## Overview
+نُقلت **بوابة المواطن** من Streamlit إلى Flask مع HTML وCSS عاديين. بقيت **بوابة الموظف** على Streamlit مؤقتًا حتى تُنقل في المرحلة التالية، لذلك لم تُحذف مكتبة Streamlit بعد.
 
-Citizens can submit community reports such as:
+النسخة الحالية تدعم:
 
-- Road and sidewalk issues
-- Waste and cleanliness problems
-- Street lighting and electrical issues
-- Water and drainage problems
-- Accessibility barriers
-- Public facility issues
-- Community disturbances
+- إرسال بلاغ باللغة العربية.
+- التحقق من الحقول في الخادم.
+- رفع صورة JPG أو PNG أو WEBP بحجم أقصى 5 ميجابايت.
+- الفرز الأولي الحتمي قبل الحفظ.
+- حفظ البلاغ في SQLite.
+- إصدار رمز متابعة عشوائي للمواطن، مع حفظ بصمته فقط في قاعدة البيانات.
+- متابعة حالة البلاغ باستخدام رمز المتابعة، لا الرقم الداخلي.
+- استمرار بوابة الموظف القديمة أثناء النقل التدريجي.
 
-Each report passes through deterministic triage before being stored and reviewed by staff.
-
-BALAGH can:
-
-1. Classify the issue.
-2. Assign an initial priority.
-3. Route the report to a service department.
-4. Detect potentially duplicated reports.
-5. Identify missing information.
-6. Store the report and its history.
-7. Generate AI-assisted recommendations.
-8. Require human review before operational decisions.
-
-## Architecture
-
-```text
-Citizen Portal
-      │
-      ▼
-Deterministic Triage
-      │
-      ├── Classification
-      ├── Priority
-      ├── Routing
-      ├── Missing Information
-      └── Duplicate Detection
-      │
-      ▼
-SQLite
-      │
-      ▼
-Staff Portal
-      │
-      ├── Triage & Routing Agent
-      └── Case Coordinator Agent
-              │
-              ▼
-       AI Recommendation
-              │
-              ▼
-         Human Review
-              │
-              ▼
-     Database + Audit Trail
-```
-
-## Agentic Workflow
-
-BALAGH uses two CrewAI agents.
-
-### Triage & Routing Agent
-
-Reviews the deterministic triage result and uses:
-
-- `GetCaseTool`
-- `FindSimilarReportsTool`
-
-### Case Coordinator Agent
-
-Recommends the next controlled action and uses:
-
-- `GetCaseTool`
-- `GetCaseHistoryTool`
-
-All agent tools are **read-only**.
-
-The agents cannot change report status, approve cases, or directly modify operational records.
-
-## Project Structure
+## الهيكل الحالي
 
 ```text
 BALAGH/
-├── citizen_app.py
-├── staff_app.py
-├── src/
-│   └── balagh/
-│       ├── triage.py
-│       ├── agents.py
-│       ├── tools.py
-│       ├── database.py
-│       └── auth.py
-├── ui/
-│   ├── citizen.html
-│   ├── staff.html
-│   └── style.css
-├── data/
-│   └── uploads/
-├── tests/
-│   ├── test_triage.py
-│   ├── test_database.py
-│   └── test_workflow.py
-├── pyproject.toml
-├── uv.lock
-└── .env.example
+├── app.py                     # تشغيل بوابة المواطن الجديدة
+├── staff_app.py               # بوابة الموظف المؤقتة على Streamlit
+├── citizen_app.py             # الواجهة القديمة، ستُحذف بعد اكتمال النقل
+├── src/balagh/
+│   ├── __init__.py            # Flask application factory
+│   ├── citizen_routes.py      # مسارات المواطن
+│   ├── triage.py              # الفرز الحتمي
+│   ├── database.py            # SQLite
+│   ├── agents.py              # الوكلاء الحاليون، سيعاد بناؤهم لاحقًا
+│   ├── tools.py
+│   └── auth.py
+├── templates/
+│   ├── base.html
+│   └── citizen/
+├── static/css/style.css
+├── data/uploads/
+└── tests/
 ```
 
-## Interfaces
+## التشغيل
 
+يتطلب المشروع Python 3.10 أو أحدث و[uv](https://docs.astral.sh/uv/).
 
-
-### Citizen Portal
-
-![Citizen Portal](docs/screenshots/citizen-portal.png)
-
-Citizens can:
-
-- Submit reports
-- Specify city, district, and landmark
-- Upload an optional image
-- Receive a tracking number
-- Check report status
-
-### Staff Portal
-
-![Staff Dashboard](docs/screenshots/staff-dashboard.png)
-
-Staff can:
-
-- View dashboard metrics
-- Filter reports
-- Review case details
-- Run AI-assisted analysis
-- Approve, modify, or reject recommendations
-- Update report status
-- Review case history
-
-## Technology Stack
-
-- Python
-- CrewAI
-- Ollama
-- Qwen3
-- Streamlit
-- SQLite
-- Pandas
-- HTML / CSS
-- uv
-
-## Setup
-
-Install dependencies:
+ثبّت الاعتمادات:
 
 ```powershell
 uv sync
 ```
 
-Install the local model:
-
-```powershell
-ollama pull qwen3:4b-instruct
-```
-
-Create the environment file:
+أنشئ ملف الإعدادات:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Example configuration:
-
-```env
-MODEL=ollama/qwen3:4b-instruct
-OLLAMA_HOST=http://localhost:11434
-STAFF_ACCESS_CODE=your-access-code
-```
-
-## Run
-
-Citizen portal:
+غيّر `FLASK_SECRET_KEY` و`STAFF_ACCESS_CODE` داخل `.env`، ثم شغّل بوابة المواطن:
 
 ```powershell
-uv run streamlit run citizen_app.py --server.port 8501
+uv run flask --app app run --debug
 ```
 
-Staff portal:
+افتح:
+
+```text
+http://127.0.0.1:5000/citizen/
+```
+
+بوابة الموظف المؤقتة:
 
 ```powershell
 uv run streamlit run staff_app.py --server.port 8502
 ```
 
-## Tests
+## الاختبارات
 
 ```powershell
 uv run python -m unittest discover -s tests -v
 ```
 
-The current tests cover deterministic triage, SQLite persistence, duplicate similarity, and the human review workflow.
+الاختبارات لا تستدعي النموذج المحلي.
 
-The automated test suite does not currently invoke the local LLM.
+## الخطوات التالية
 
-## Current Scope
+1. نقل بوابة الموظف إلى Flask.
+2. حذف واجهتي Streamlit والاعتماد الخاص به نهائيًا.
+3. تبسيط سير العمل إلى وكيل فرز ووكيل تنسيق حالة.
+4. إضافة RAG من مصدر محلي صغير وواضح.
+5. إضافة الإيقاف للمراجعة البشرية والاستكمال بعد القرار.
+6. إضافة قياسات بسيطة عبر LangSmith لتقييم الجودة.
 
-BALAGH is currently a prototype.
+## حدود النسخة الحالية
 
-Current limitations include:
-
-- Prototype staff authentication
-- Local SQLite storage
-- Local Ollama inference
-- No production identity or role-based access control
-- No external government-system integration
-- No map-based geolocation validation
-- Uploaded images are stored but not analyzed
+- الدخول للموظفين أولي وليس نظام هويات إنتاجيًا.
+- التخزين محلي في SQLite.
+- الصور محفوظة محليًا ولا يجري تحليل محتواها.
+- لا توجد خرائط أو تكاملات حكومية خارجية.
+- جزء الوكلاء ما زال من النسخة السابقة وسيُعاد بناؤه في مرحلة مستقلة.

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}متابعة بلاغ | بلاغ{% endblock %}
+
+{% block content %}
+<section class="page-intro compact">
+    <p class="eyebrow">متابعة البلاغ</p>
+    <h1>أدخل رمز المتابعة</h1>
+    <p>استخدم الرمز الذي ظهر لك بعد إرسال البلاغ.</p>
+</section>
+
+<form class="tracking-form" method="post">
+    <label for="tracking_code">رمز المتابعة</label>
+    <input id="tracking_code" name="tracking_code" value="{{ tracking_code }}" autocomplete="off" placeholder="مثال: A1B2C3D4E5" required>
+    <button class="primary-button" type="submit">عرض الحالة</button>
+</form>
+
+{% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+
+{% if report %}
+<section class="report-summary">
+    <div class="summary-heading">
+        <div>
+            <p class="eyebrow">BLG-{{ "%05d"|format(report.id) }}</p>
+            <h2>{{ report.title }}</h2>
+        </div>
+        <span class="status">{{ status_ar(report.status) }}</span>
+    </div>
+    <dl>
+        <div><dt>التصنيف</dt><dd>{{ category_ar(report.category) }}</dd></div>
+        <div><dt>الأولوية</dt><dd>{{ priority_ar(report.priority) }}</dd></div>
+        <div><dt>المدينة</dt><dd>{{ report.city }}</dd></div>
+        <div><dt>الحي</dt><dd>{{ report.district }}</dd></div>
+    </dl>
+</section>
+{% endif %}
+{% endblock %}

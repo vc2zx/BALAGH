@@ -37,6 +37,35 @@ class DatabaseTests(unittest.TestCase):
                 self.assertEqual(len(history), 1)
                 self.assertEqual(history.iloc[0]["action"], "Report created")
 
+    def test_report_can_be_found_by_tracking_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            with (
+                patch.object(database, "DATA_DIR", temp_path),
+                patch.object(database, "DB_PATH", temp_path / "test.db"),
+            ):
+                database.init_db()
+                report = ReportInput(
+                    title="إنارة شارع متوقفة",
+                    description="ثلاثة أعمدة إنارة متوقفة منذ يومين",
+                    city="الرياض",
+                    district="الروابي",
+                    landmark="قرب المسجد",
+                )
+                result = triage_report(report, [], "Arabic")
+                token_hash = "example-tracking-hash"
+                report_id = database.create_report(
+                    report,
+                    result,
+                    "Arabic",
+                    tracking_token_hash=token_hash,
+                )
+
+                stored = database.get_report_by_tracking_hash(token_hash)
+                self.assertIsNotNone(stored)
+                self.assertEqual(stored["id"], report_id)
+                self.assertIsNone(database.get_report_by_tracking_hash("wrong-hash"))
+
 
 if __name__ == "__main__":
     unittest.main()

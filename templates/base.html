@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}بلاغ{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{{ url_for('citizen.home') }}" aria-label="العودة إلى بوابة المواطن">
+            <span class="brand-mark" aria-hidden="true">ب</span>
+            <span>
+                <strong>بلاغ</strong>
+                <small>BALAGH</small>
+            </span>
+        </a>
+        <nav aria-label="التنقل الرئيسي">
+            <a href="{{ url_for('citizen.home') }}">إرسال بلاغ</a>
+            <a href="{{ url_for('citizen.track') }}">متابعة بلاغ</a>
+        </nav>
+    </header>
+
+    <main class="page-shell">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

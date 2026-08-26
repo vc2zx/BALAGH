@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}تم استلام البلاغ | بلاغ{% endblock %}
+
+{% block content %}
+<section class="result-panel">
+    <div class="success-mark" aria-hidden="true">✓</div>
+    <p class="eyebrow">تم استلام البلاغ</p>
+    <h1>احتفظ برمز المتابعة</h1>
+    <p class="tracking-code">{{ tracking_code }}</p>
+    <p>لن تتمكن من متابعة البلاغ باستخدام رقمه الداخلي فقط.</p>
+</section>
+
+{% if report.emergency_warning %}
+<div class="alert error" role="alert">{{ report.emergency_warning }}</div>
+{% endif %}
+
+<section class="report-summary">
+    <h2>{{ report.title }}</h2>
+    <dl>
+        <div><dt>رقم البلاغ</dt><dd>BLG-{{ "%05d"|format(report.id) }}</dd></div>
+        <div><dt>التصنيف الأولي</dt><dd>{{ category_ar(report.category) }}</dd></div>
+        <div><dt>الأولوية الأولية</dt><dd>{{ priority_ar(report.priority) }}</dd></div>
+        <div><dt>الموقع</dt><dd>{{ report.city }}، {{ report.district }}</dd></div>
+    </dl>
+</section>
+
+<div class="actions">
+    <a class="primary-button" href="{{ url_for('citizen.track') }}">متابعة البلاغ</a>
+    <a class="secondary-button" href="{{ url_for('citizen.home') }}">إرسال بلاغ آخر</a>
+</div>
+{% endblock %}
