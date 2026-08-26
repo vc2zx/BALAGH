@@ -1,0 +1,69 @@
+{% extends "staff/base.html" %}
+
+{% block title %}البلاغات | بلاغ{% endblock %}
+
+{% block content %}
+<section class="staff-page-heading">
+    <div>
+        <p class="eyebrow">إدارة الحالات</p>
+        <h1>البلاغات</h1>
+        <p>ابحث وصفِّ البلاغات ثم افتح الحالة لمراجعتها.</p>
+    </div>
+</section>
+
+<form class="filter-panel" method="get">
+    <div class="field filter-search">
+        <label for="q">بحث</label>
+        <input id="q" name="q" value="{{ filters.q }}" placeholder="العنوان أو المدينة أو الحي أو رقم البلاغ">
+    </div>
+    <div class="field">
+        <label for="category">التصنيف</label>
+        <select id="category" name="category">
+            <option value="">الكل</option>
+            {% for value in choices.categories %}<option value="{{ value }}" {{ 'selected' if filters.category == value else '' }}>{{ category_label(value) }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="field">
+        <label for="priority">الأولوية</label>
+        <select id="priority" name="priority">
+            <option value="">الكل</option>
+            {% for value in choices.priorities %}<option value="{{ value }}" {{ 'selected' if filters.priority == value else '' }}>{{ priority_label(value) }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="field">
+        <label for="status">الحالة</label>
+        <select id="status" name="status">
+            <option value="">الكل</option>
+            {% for value in choices.statuses %}<option value="{{ value }}" {{ 'selected' if filters.status == value else '' }}>{{ status_label(value) }}</option>{% endfor %}
+        </select>
+    </div>
+    <button class="primary-button" type="submit">تطبيق</button>
+    <a class="secondary-button" href="{{ url_for('staff.reports') }}">مسح</a>
+</form>
+
+<section class="staff-panel">
+    <div class="panel-heading"><h2>النتائج</h2><span>{{ reports|length }} بلاغ</span></div>
+    {% if reports %}
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>رقم البلاغ</th><th>العنوان</th><th>الموقع</th><th>التصنيف</th><th>الأولوية</th><th>الحالة</th><th></th></tr></thead>
+            <tbody>
+                {% for report in reports %}
+                <tr>
+                    <td class="case-id">BLG-{{ "%05d"|format(report.id) }}</td>
+                    <td>{{ report.title }}</td>
+                    <td>{{ report.city }}، {{ report.district }}</td>
+                    <td>{{ category_label(report.category) }}</td>
+                    <td><span class="pill priority-{{ report.priority|lower }}">{{ priority_label(report.priority) }}</span></td>
+                    <td><span class="pill status-{{ report.status|lower|replace(' ', '-') }}">{{ status_label(report.status) }}</span></td>
+                    <td><a class="table-link" href="{{ url_for('staff.review', report_id=report.id) }}">مراجعة</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">لا توجد بلاغات مطابقة للفلاتر الحالية.</div>
+    {% endif %}
+</section>
+{% endblock %}

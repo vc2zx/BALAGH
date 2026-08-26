@@ -1,13 +1,12 @@
 [project]
 name = "balagh-community-triage"
-version = "1.1.0"
+version = "1.2.2"
 description = "A local human-in-the-loop community issue triage and agentic case coordination system."
 authors = [{ name = "Suliman Altayar" }]
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "crewai>=1.15.10,<2.0.0",
     "flask>=3.1.0,<4.0.0",
-    "streamlit>=1.47.0",
     "pandas>=2.2.0",
     "python-dotenv>=1.0.1",
 ]

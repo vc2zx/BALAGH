@@ -8,6 +8,19 @@ from typing import Mapping, Sequence
 
 
 CATEGORY_RULES: dict[str, dict[str, object]] = {
+    "Traffic Signs & Road Safety": {
+        "department": "Traffic Signs and Road Safety",
+        "keywords": [
+            "speed limit sign", "speed limit", "speed sign", "traffic sign",
+            "road sign", "missing sign", "damaged sign", "stop sign",
+            "yield sign", "road marking", "lane marking", "pedestrian crossing",
+            "signage", "حد السرعة", "لوحة السرعة", "لوحة تحديد السرعة",
+            "علامة السرعة", "لوحة مرورية", "اللوحة المرورية", "علامة مرورية",
+            "العلامة المرورية", "إشارة مرورية", "اشارة مرورية", "لوحة مفقودة",
+            "علامة مفقودة", "لوحة تالفة", "دهان الطريق", "تخطيط الطريق",
+            "خطوط المسارات", "ممر مشاة",
+        ],
+    },
     "Roads & Sidewalks": {
         "department": "Road and Sidewalk Maintenance",
         "keywords": [
@@ -59,6 +72,44 @@ CATEGORY_RULES: dict[str, dict[str, object]] = {
     },
 }
 
+CATEGORY_LABELS_AR = {
+    "Traffic Signs & Road Safety": "اللوحات والسلامة المرورية",
+    "Roads & Sidewalks": "الطرق والأرصفة",
+    "Waste & Cleanliness": "النفايات والنظافة",
+    "Street Lighting & Electrical": "إنارة الشوارع والكهرباء",
+    "Water & Drainage": "المياه والصرف",
+    "Accessibility": "إمكانية الوصول",
+    "Public Facilities": "المرافق العامة",
+    "Noise & Community Disturbance": "الإزعاج والمخالفات المجتمعية",
+    "Needs Human Classification": "يحتاج تصنيفًا بشريًا",
+}
+
+DEPARTMENT_LABELS_AR = {
+    "Traffic Signs and Road Safety": "قسم اللوحات والسلامة المرورية",
+    "Road and Sidewalk Maintenance": "قسم صيانة الطرق والأرصفة",
+    "Environmental and Cleaning Services": "قسم الخدمات البيئية والنظافة",
+    "Street Lighting and Electrical Safety": "قسم إنارة الشوارع والسلامة الكهربائية",
+    "Water and Drainage Operations": "قسم عمليات المياه والصرف",
+    "Accessibility and Inclusion Unit": "وحدة إمكانية الوصول والدمج",
+    "Public Facilities and Parks": "قسم المرافق العامة والحدائق",
+    "Community Compliance": "قسم الامتثال المجتمعي",
+    "Triage Review Queue": "مسار مراجعة التصنيف",
+}
+
+PRIORITY_LABELS_AR = {
+    "Low": "منخفضة",
+    "Medium": "متوسطة",
+    "High": "مرتفعة",
+    "Critical": "حرجة",
+}
+
+CONFIDENCE_LABELS_AR = {
+    "High": "عالية",
+    "Medium": "متوسطة",
+    "Low": "منخفضة",
+    "None": "غير متوفرة",
+}
+
 CRITICAL_KEYWORDS = [
     "fire", "gas leak", "explosion", "electrocution", "live wire", "collapsed",
     "injured", "trapped", "active flooding", "حريق", "تسرب غاز", "انفجار",
@@ -92,6 +143,8 @@ class TriageResult:
     category: str
     priority: str
     department: str
+    category_confidence: str
+    category_evidence: list[str]
     reasoning: str
     missing_information: list[str]
     duplicate_of: int | None
@@ -134,7 +187,7 @@ def _tokens(text: str) -> set[str]:
     return tokens
 
 
-def classify_category(report: ReportInput) -> tuple[str, str, int]:
+def _category_matches(report: ReportInput) -> tuple[str, str, int, list[str], str]:
     text = normalize_text(
         " ".join([
             report.title,
@@ -145,28 +198,53 @@ def classify_category(report: ReportInput) -> tuple[str, str, int]:
         ])
     )
 
-    best_category = "General Community Services"
-    best_department = "General Service Coordination"
-    best_score = 0
+    text_tokens = set(text.split())
+    candidates: list[tuple[int, str, str, list[str]]] = []
 
     for category, rule in CATEGORY_RULES.items():
         score = 0
+        matched: list[str] = []
         for keyword in rule["keywords"]:
             normalized_keyword = normalize_text(keyword)
-            if normalized_keyword and normalized_keyword in text:
+            if not normalized_keyword:
+                continue
+            is_match = (
+                normalized_keyword in text
+                if " " in normalized_keyword
+                else normalized_keyword in text_tokens
+            )
+            if is_match:
                 score += 3 if " " in normalized_keyword else 1
+                matched.append(str(keyword))
 
-        if score > best_score:
-            best_score = score
-            best_category = category
-            best_department = str(rule["department"])
+        candidates.append((score, category, str(rule["department"]), matched))
 
-    return best_category, best_department, best_score
+    best_score = max((candidate[0] for candidate in candidates), default=0)
+    winners = [candidate for candidate in candidates if candidate[0] == best_score]
+
+    if best_score == 0 or len(winners) != 1:
+        return (
+            "Needs Human Classification",
+            "Triage Review Queue",
+            best_score,
+            [],
+            "None",
+        )
+
+    score, category, department, evidence = winners[0]
+    confidence = "High" if score >= 3 else "Medium"
+    return category, department, score, evidence, confidence
+
+
+def classify_category(report: ReportInput) -> tuple[str, str, int]:
+    category, department, score, _evidence, _confidence = _category_matches(report)
+    return category, department, score
 
 
 def assess_priority(
     report: ReportInput,
     category: str,
+    language: str = "English",
 ) -> tuple[str, list[str], str | None]:
     text = normalize_text(" ".join([report.title, report.description, report.landmark]))
 
@@ -178,59 +256,124 @@ def assess_priority(
             "قد يكون البلاغ مرتبطًا بخطر فوري. تواصل مع خدمة الطوارئ المحلية "
             "المناسبة فورًا ولا تنتظر معالجة البلاغ داخل النظام."
         )
-        return (
-            "Critical",
-            ["Potential immediate danger was detected: " + ", ".join(critical_hits[:3])],
-            warning,
+        reason = (
+            "رُصدت مؤشرات قد تدل على خطر فوري: " + "، ".join(critical_hits[:3])
+            if language.lower() == "arabic"
+            else "Potential immediate danger was detected: " + ", ".join(critical_hits[:3])
         )
+        return "Critical", [reason], warning
 
     high_hits = [
         keyword for keyword in HIGH_KEYWORDS if normalize_text(keyword) in text
     ]
     if high_hits:
-        return (
-            "High",
-            ["A sensitive place or high-impact condition was detected: " + ", ".join(high_hits[:3])],
-            None,
+        reason = (
+            "رُصد موقع حساس أو ظرف مرتفع التأثير: " + "، ".join(high_hits[:3])
+            if language.lower() == "arabic"
+            else "A sensitive place or high-impact condition was detected: " + ", ".join(high_hits[:3])
         )
+        return "High", [reason], None
 
     if category in {"Street Lighting & Electrical", "Water & Drainage", "Accessibility"}:
+        reason = (
+            "قد تؤثر هذه الفئة في السلامة العامة أو الوصول إلى خدمة أساسية."
+            if language.lower() == "arabic"
+            else f"{category} issues may affect public safety or essential access."
+        )
         return (
             "High",
-            [f"{category} issues may affect public safety or essential access."],
+            [reason],
             None,
         )
 
-    if category in {"Roads & Sidewalks", "Waste & Cleanliness"}:
+    if category in {
+        "Traffic Signs & Road Safety",
+        "Roads & Sidewalks",
+        "Waste & Cleanliness",
+        "Needs Human Classification",
+    }:
+        reason = (
+            "أُسندت أولوية تشغيلية متوسطة إلى أن يتحقق الموظف من مستوى الخطر والتأثير."
+            if language.lower() == "arabic"
+            else "A medium operational priority is assigned pending human verification of risk and impact."
+        )
         return (
             "Medium",
-            [f"{category} is assigned a normal operational priority."],
+            [reason],
             None,
         )
 
-    return "Low", ["No immediate safety indicator was detected."], None
+    reason = (
+        "لم تُرصد مؤشرات خطر فوري."
+        if language.lower() == "arabic"
+        else "No immediate safety indicator was detected."
+    )
+    return "Low", [reason], None
 
 
-def find_missing_information(report: ReportInput) -> list[str]:
+def find_missing_information(
+    report: ReportInput,
+    category: str,
+    language: str = "English",
+) -> list[str]:
     missing: list[str] = []
     combined = normalize_text(" ".join([report.title, report.description, report.landmark]))
 
+    def message(english: str, arabic: str) -> str:
+        return arabic if language.lower() == "arabic" else english
+
+    def has_any(terms: Sequence[str]) -> bool:
+        return any(normalize_text(term) in combined for term in terms)
+
     if len(report.description.strip()) < 35:
-        missing.append("More detailed issue description")
+        missing.append(message("More detailed issue description", "وصف أكثر تفصيلًا للمشكلة"))
+
+    if category == "Traffic Signs & Road Safety":
+        direction_terms = [
+            "direction", "northbound", "southbound", "eastbound", "westbound",
+            "intersection", "exit", "lane", "اتجاه", "شمال", "جنوب", "شرق",
+            "غرب", "تقاطع", "مخرج", "مسار",
+        ]
+        if not has_any(direction_terms):
+            missing.append(
+                message(
+                    "Driving direction and nearest intersection or exit",
+                    "اتجاه السير وأقرب تقاطع أو مخرج لتحديد موقع اللوحة بدقة",
+                )
+            )
+        return missing
 
     if not report.landmark.strip() and not any(
         term in combined for term in map(normalize_text, LOCATION_TERMS)
     ):
-        missing.append("Nearby landmark or precise location")
+        missing.append(message("Nearby landmark or precise location", "معلم قريب أو موقع أدق"))
 
-    if not re.search(r"\d", report.description):
-        missing.append("Approximate quantity, size, or number affected")
+    if category in {"Roads & Sidewalks", "Waste & Cleanliness", "Street Lighting & Electrical"}:
+        quantity_terms = [
+            "large", "small", "meter", "metre", "one", "two", "three",
+            "كبيرة", "صغيرة", "متر", "واحد", "اثنان", "ثلاثة", "عدة",
+        ]
+        if not re.search(r"\d", report.description) and not has_any(quantity_terms):
+            missing.append(
+                message(
+                    "Approximate size or number of affected assets",
+                    "الحجم التقريبي أو عدد العناصر المتأثرة",
+                )
+            )
 
-    time_terms = [
-        "today", "yesterday", "hour", "day", "منذ", "اليوم", "امس", "أمس", "ساعة", "يوم",
-    ]
-    if not any(normalize_text(word) in combined for word in time_terms):
-        missing.append("When the issue started")
+    if category in {
+        "Roads & Sidewalks",
+        "Waste & Cleanliness",
+        "Street Lighting & Electrical",
+        "Water & Drainage",
+        "Noise & Community Disturbance",
+    }:
+        time_terms = [
+            "today", "yesterday", "hour", "day", "week", "since",
+            "منذ", "اليوم", "امس", "أمس", "ساعة", "يوم", "أسبوع", "اسبوع",
+        ]
+        if not has_any(time_terms):
+            missing.append(message("When the issue started", "وقت بدء المشكلة أو مدة استمرارها"))
 
     return missing
 
@@ -315,6 +458,9 @@ def build_acknowledgment(
     language: str,
 ) -> str:
     if language.lower() == "arabic":
+        category_label = CATEGORY_LABELS_AR.get(category, category)
+        priority_label = PRIORITY_LABELS_AR.get(priority, priority)
+        department_label = DEPARTMENT_LABELS_AR.get(department, department)
         duplicate_note = (
             f" وتم ربطه مبدئيًا ببلاغ مشابه رقم {duplicate_of}."
             if duplicate_of
@@ -322,8 +468,8 @@ def build_acknowledgment(
         )
         return (
             f"تم استلام بلاغك عن «{report.title}» في حي {report.district}. "
-            f"صُنّف البلاغ ضمن {category} وبأولوية {priority}، "
-            f"وسيُوجّه إلى {department}{duplicate_note}"
+            f"صُنّف البلاغ ضمن {category_label} وبأولوية {priority_label}، "
+            f"وسيُوجّه إلى {department_label}{duplicate_note}"
         )
 
     duplicate_note = (
@@ -343,20 +489,63 @@ def triage_report(
     existing_reports: Sequence[Mapping[str, object]] | None = None,
     language: str = "English",
 ) -> TriageResult:
-    category, department, category_score = classify_category(report)
-    priority, priority_reasons, emergency_warning = assess_priority(report, category)
-    missing_information = find_missing_information(report)
+    (
+        category,
+        department,
+        category_score,
+        category_evidence,
+        category_confidence,
+    ) = _category_matches(report)
+    priority, priority_reasons, emergency_warning = assess_priority(
+        report,
+        category,
+        language,
+    )
+    missing_information = find_missing_information(report, category, language)
     duplicate_of, duplicate_score = detect_duplicate(report, existing_reports or [])
 
-    reasoning_parts = [f"Category evidence score: {category_score}.", *priority_reasons]
-    if duplicate_of:
-        reasoning_parts.append(
-            f"Likely duplicate of report #{duplicate_of} with {duplicate_score:.0%} similarity."
+    if language.lower() == "arabic":
+        confidence_label = CONFIDENCE_LABELS_AR.get(
+            category_confidence,
+            category_confidence,
         )
+        if category_evidence:
+            category_reason = (
+                f"ثقة التصنيف الحتمي {confidence_label}؛ "
+                "الكلمات المفتاحية المطابقة المستخدمة لاختيار المجال "
+                f"(وليست أدلة ميدانية): {'، '.join(category_evidence)}."
+            )
+        else:
+            category_reason = (
+                "لم تظهر أدلة نصية كافية لتحديد الفئة، لذلك أُحيل البلاغ "
+                "إلى مراجعة التصنيف بدل إسناده إلى فئة عامة افتراضية."
+            )
+        reasoning_parts = [category_reason, *priority_reasons]
+        if duplicate_of:
+            reasoning_parts.append(
+                f"يوجد بلاغ مشابه محتمل رقم {duplicate_of} بنسبة تشابه {duplicate_score:.0%}."
+            )
+        else:
+            reasoning_parts.append(
+                "لم يتجاوز أي بلاغ مفتوح عتبة التكرار "
+                f"(أفضل تشابه: {duplicate_score:.0%})."
+            )
     else:
-        reasoning_parts.append(
-            f"No open report passed the duplicate threshold (best similarity: {duplicate_score:.0%})."
-        )
+        evidence = ", ".join(category_evidence) or "none"
+        reasoning_parts = [
+            f"Category confidence: {category_confidence}; matched category keywords "
+            f"(lexical matches only, not field evidence): {evidence}; "
+            f"weighted score: {category_score}.",
+            *priority_reasons,
+        ]
+        if duplicate_of:
+            reasoning_parts.append(
+                f"Likely duplicate of report #{duplicate_of} with {duplicate_score:.0%} similarity."
+            )
+        else:
+            reasoning_parts.append(
+                f"No open report passed the duplicate threshold (best similarity: {duplicate_score:.0%})."
+            )
 
     acknowledgment = build_acknowledgment(
         report,
@@ -371,6 +560,8 @@ def triage_report(
         category=category,
         priority=priority,
         department=department,
+        category_confidence=category_confidence,
+        category_evidence=category_evidence,
         reasoning=" ".join(reasoning_parts),
         missing_information=missing_information,
         duplicate_of=duplicate_of,
@@ -397,6 +588,8 @@ def build_case_markdown(
 - Category: {result.category}
 - Priority: {result.priority}
 - Department: {result.department}
+- Category confidence: {result.category_confidence}
+- Matched category keywords (lexical matches only): {', '.join(result.category_evidence) or 'None'}
 - Potential duplicate: {duplicate}
 
 ## Deterministic reasoning

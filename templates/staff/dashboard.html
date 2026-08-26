@@ -1,0 +1,49 @@
+{% extends "staff/base.html" %}
+
+{% block title %}لوحة التحكم | بلاغ{% endblock %}
+
+{% block content %}
+<section class="staff-page-heading">
+    <div>
+        <p class="eyebrow">بوابة الموظف</p>
+        <h1>لوحة التحكم</h1>
+        <p>نظرة سريعة على البلاغات والتوصيات التي تحتاج مراجعة.</p>
+    </div>
+    <a class="primary-button" href="{{ url_for('staff.reports') }}">عرض جميع البلاغات</a>
+</section>
+
+<section class="metrics-grid" aria-label="مؤشرات البلاغات">
+    <article class="metric-card green"><span>إجمالي البلاغات</span><strong>{{ metrics.total }}</strong></article>
+    <article class="metric-card red"><span>بلاغات حرجة</span><strong>{{ metrics.critical }}</strong></article>
+    <article class="metric-card amber"><span>مكررة محتملة</span><strong>{{ metrics.duplicates }}</strong></article>
+    <article class="metric-card blue"><span>منتهية</span><strong>{{ metrics.closed }}</strong></article>
+    <article class="metric-card purple"><span>بانتظار المراجعة</span><strong>{{ metrics.pending_ai }}</strong></article>
+</section>
+
+<section class="staff-panel">
+    <div class="panel-heading">
+        <div><p class="eyebrow">آخر التحديثات</p><h2>أحدث البلاغات</h2></div>
+    </div>
+    {% if reports %}
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>رقم البلاغ</th><th>العنوان</th><th>الموقع</th><th>الأولوية</th><th>الحالة</th><th></th></tr></thead>
+            <tbody>
+                {% for report in reports %}
+                <tr>
+                    <td class="case-id">BLG-{{ "%05d"|format(report.id) }}</td>
+                    <td>{{ report.title }}</td>
+                    <td>{{ report.city }}، {{ report.district }}</td>
+                    <td><span class="pill priority-{{ report.priority|lower }}">{{ priority_label(report.priority) }}</span></td>
+                    <td><span class="pill status-{{ report.status|lower|replace(' ', '-') }}">{{ status_label(report.status) }}</span></td>
+                    <td><a class="table-link" href="{{ url_for('staff.review', report_id=report.id) }}">فتح</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">لا توجد بلاغات محفوظة حتى الآن.</div>
+    {% endif %}
+</section>
+{% endblock %}

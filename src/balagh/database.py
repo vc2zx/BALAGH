@@ -71,6 +71,8 @@ def init_db() -> None:
                 category TEXT NOT NULL,
                 priority TEXT NOT NULL,
                 department TEXT NOT NULL,
+                category_confidence TEXT NOT NULL DEFAULT 'None',
+                category_evidence TEXT,
                 status TEXT NOT NULL DEFAULT 'Open',
                 duplicate_of INTEGER,
                 duplicate_score REAL NOT NULL DEFAULT 0,
@@ -88,6 +90,13 @@ def init_db() -> None:
         _ensure_column(connection, "reports", "updated_at", "TEXT")
         _ensure_column(connection, "reports", "attachment_path", "TEXT")
         _ensure_column(connection, "reports", "tracking_token_hash", "TEXT")
+        _ensure_column(
+            connection,
+            "reports",
+            "category_confidence",
+            "TEXT NOT NULL DEFAULT 'None'",
+        )
+        _ensure_column(connection, "reports", "category_evidence", "TEXT")
         connection.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_tracking_token_hash
@@ -159,12 +168,13 @@ def create_report(
             """
             INSERT INTO reports (
                 created_at, updated_at, title, description, city, district,
-                landmark, category, priority, department, status,
+                landmark, category, priority, department,
+                category_confidence, category_evidence, status,
                 duplicate_of, duplicate_score, reasoning, missing_information,
                 acknowledgment, emergency_warning, language, attachment_path,
                 tracking_token_hash
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 now,
@@ -177,6 +187,8 @@ def create_report(
                 result.category,
                 result.priority,
                 result.department,
+                result.category_confidence,
+                " | ".join(result.category_evidence),
                 result.duplicate_of,
                 result.duplicate_score,
                 result.reasoning,
@@ -278,6 +290,71 @@ def update_report_status(
             VALUES (?, ?, ?, 'Status changed', ?)
             """,
             (report_id, _now(), actor, f"{previous['status']} → {status}"),
+        )
+        connection.commit()
+        return True
+
+
+def update_report_triage(
+    report_id: int,
+    result: TriageResult,
+    actor: str = "staff",
+) -> bool:
+    """Apply a human-triggered recalculation using the current deterministic rules."""
+    with _connection() as connection:
+        previous = connection.execute(
+            "SELECT category, priority, department FROM reports WHERE id = ?",
+            (report_id,),
+        ).fetchone()
+        if previous is None:
+            return False
+
+        now = _now()
+        connection.execute(
+            """
+            UPDATE reports
+            SET category = ?,
+                priority = ?,
+                department = ?,
+                category_confidence = ?,
+                category_evidence = ?,
+                duplicate_of = ?,
+                duplicate_score = ?,
+                reasoning = ?,
+                missing_information = ?,
+                acknowledgment = ?,
+                emergency_warning = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                result.category,
+                result.priority,
+                result.department,
+                result.category_confidence,
+                " | ".join(result.category_evidence),
+                result.duplicate_of,
+                result.duplicate_score,
+                result.reasoning,
+                " | ".join(result.missing_information),
+                result.acknowledgment,
+                result.emergency_warning,
+                now,
+                report_id,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO case_history (report_id, created_at, actor, action, details)
+            VALUES (?, ?, ?, 'Triage recalculated', ?)
+            """,
+            (
+                report_id,
+                now,
+                actor,
+                f"{previous['category']} / {previous['priority']} → "
+                f"{result.category} / {result.priority}",
+            ),
         )
         connection.commit()
         return True

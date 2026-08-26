@@ -18,6 +18,41 @@ class TriageTests(unittest.TestCase):
         self.assertEqual(result.category, "Roads & Sidewalks")
         self.assertIn(result.priority, {"Medium", "High"})
 
+    def test_missing_speed_limit_sign_uses_traffic_safety_category(self) -> None:
+        report = ReportInput(
+            title="there's no speed limit sign",
+            description="the speed limit in this road is unknown",
+            city="riyadh",
+            district="al malaz",
+            landmark="abdullah road",
+        )
+        result = triage_report(report, existing_reports=[], language="Arabic")
+
+        self.assertEqual(result.category, "Traffic Signs & Road Safety")
+        self.assertEqual(result.department, "Traffic Signs and Road Safety")
+        self.assertEqual(result.priority, "Medium")
+        self.assertEqual(result.category_confidence, "High")
+        self.assertIn("speed limit", result.category_evidence)
+        self.assertIn("وليست أدلة ميدانية", result.reasoning)
+        self.assertTrue(any("اتجاه السير" in item for item in result.missing_information))
+        self.assertFalse(any("عدد العناصر" in item for item in result.missing_information))
+        self.assertFalse(any("وقت بدء" in item for item in result.missing_information))
+
+    def test_unmatched_report_requires_human_classification(self) -> None:
+        report = ReportInput(
+            title="مشكلة غير واضحة",
+            description="يوجد أمر غير واضح ونحتاج إلى مراجعته ميدانيًا",
+            city="الرياض",
+            district="الملز",
+        )
+        result = triage_report(report, existing_reports=[], language="Arabic")
+
+        self.assertEqual(result.category, "Needs Human Classification")
+        self.assertEqual(result.department, "Triage Review Queue")
+        self.assertEqual(result.priority, "Medium")
+        self.assertEqual(result.category_confidence, "None")
+        self.assertIn("بدل إسناده إلى فئة عامة افتراضية", result.reasoning)
+
     def test_critical_warning_is_deterministic(self) -> None:
         report = ReportInput(
             title="سلك مكشوف",

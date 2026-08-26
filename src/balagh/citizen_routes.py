@@ -89,6 +89,7 @@ def _priority_ar(priority: str) -> str:
 
 def _category_ar(category: str) -> str:
     return {
+        "Traffic Signs & Road Safety": "اللوحات والسلامة المرورية",
         "Roads & Sidewalks": "الطرق والأرصفة",
         "Waste & Cleanliness": "النفايات والنظافة",
         "Street Lighting & Electrical": "إنارة الشوارع والكهرباء",
@@ -96,7 +97,7 @@ def _category_ar(category: str) -> str:
         "Accessibility": "إمكانية الوصول",
         "Public Facilities": "المرافق العامة",
         "Noise & Community Disturbance": "الإزعاج والمخالفات المجتمعية",
-        "General Community Services": "الخدمات المجتمعية العامة",
+        "Needs Human Classification": "يحتاج تصنيفًا بشريًا",
     }.get(category, category)
 
 

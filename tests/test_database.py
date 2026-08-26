@@ -32,6 +32,8 @@ class DatabaseTests(unittest.TestCase):
                 self.assertIsNotNone(stored)
                 self.assertEqual(stored["title"], report.title)
                 self.assertEqual(stored["status"], "Open")
+                self.assertEqual(stored["category_confidence"], result.category_confidence)
+                self.assertIn("نفايات", stored["category_evidence"])
 
                 history = database.get_case_history(report_id)
                 self.assertEqual(len(history), 1)

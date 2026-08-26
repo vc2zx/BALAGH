@@ -1,0 +1,24 @@
+{% extends "staff/base.html" %}
+
+{% block title %}دخول الموظف | بلاغ{% endblock %}
+
+{% block content %}
+<section class="login-card">
+    <div class="brand login-brand">
+        <span class="brand-mark" aria-hidden="true">ب</span>
+        <span><strong>بلاغ</strong><small>بوابة الموظف</small></span>
+    </div>
+    <p class="eyebrow">وصول داخلي</p>
+    <h1>دخول الموظف</h1>
+    <p>أدخل رمز الوصول للانتقال إلى لوحة إدارة البلاغات.</p>
+
+    {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+
+    <form class="login-form" method="post">
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <label for="access_code">رمز الوصول</label>
+        <input id="access_code" name="access_code" type="password" autocomplete="current-password" required autofocus>
+        <button class="primary-button" type="submit">دخول إلى النظام</button>
+    </form>
+</section>
+{% endblock %}

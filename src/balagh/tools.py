@@ -6,6 +6,7 @@ from typing import Type
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
+from balagh.agent_policy import build_agent_case_context
 from balagh.database import find_similar_reports, get_case_history, get_report
 
 
@@ -17,7 +18,9 @@ class GetCaseTool(BaseTool):
     name: str = "get_case"
     description: str = (
         "Read the stored facts, deterministic triage, current status, and safety warning "
-        "for one BALAGH case. This tool is read-only."
+        "for one BALAGH case. It also returns a non-mutating preview produced by the "
+        "current deterministic rules so stale stored classifications can be challenged. "
+        "This tool is read-only."
     )
     args_schema: Type[BaseModel] = ReportIdInput
 
@@ -26,25 +29,10 @@ class GetCaseTool(BaseTool):
         if row is None:
             return "Case not found."
 
-        allowed_fields = [
-            "id",
-            "created_at",
-            "title",
-            "description",
-            "city",
-            "district",
-            "landmark",
-            "category",
-            "priority",
-            "department",
-            "status",
-            "duplicate_of",
-            "duplicate_score",
-            "reasoning",
-            "missing_information",
-            "emergency_warning",
-        ]
-        payload = {field: row.get(field) for field in allowed_fields}
+        payload = build_agent_case_context(
+            row,
+            language=str(row.get("language", "Arabic")),
+        )
         return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -52,13 +40,21 @@ class FindSimilarReportsTool(BaseTool):
     name: str = "find_similar_reports"
     description: str = (
         "Read the most similar stored BALAGH reports for a selected case. "
-        "Returns case IDs, locations, status, and similarity scores. Read-only."
+        "Returns candidates, locations, status, and similarity scores. A score is not "
+        "confirmation of duplication; an employee must decide. Read-only."
     )
     args_schema: Type[BaseModel] = ReportIdInput
 
     def _run(self, report_id: int) -> str:
         rows = find_similar_reports(report_id, limit=5)
-        return json.dumps(rows, ensure_ascii=False, indent=2)
+        payload = {
+            "interpretation": (
+                "Potential duplicate candidates only. Similarity scores never confirm "
+                "duplication without employee review."
+            ),
+            "candidates": rows,
+        }
+        return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 class GetCaseHistoryTool(BaseTool):
