@@ -104,7 +104,6 @@ def init_db() -> None:
             WHERE tracking_token_hash IS NOT NULL
             """
         )
-
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS agent_recommendations (
@@ -117,9 +116,33 @@ def init_db() -> None:
                 decision TEXT NOT NULL DEFAULT 'Pending',
                 reviewer_note TEXT,
                 reviewed_at TEXT,
+                workflow_name TEXT NOT NULL DEFAULT 'legacy',
+                validation_notes TEXT,
+                source_citations TEXT,
+                workflow_thread_id TEXT,
+                agent_route TEXT,
+                tool_calls TEXT,
+                workflow_resume_status TEXT NOT NULL DEFAULT 'not_applicable',
                 FOREIGN KEY(report_id) REFERENCES reports(id)
             )
             """
+        )
+        _ensure_column(
+            connection,
+            "agent_recommendations",
+            "workflow_name",
+            "TEXT NOT NULL DEFAULT 'legacy'",
+        )
+        _ensure_column(connection, "agent_recommendations", "validation_notes", "TEXT")
+        _ensure_column(connection, "agent_recommendations", "source_citations", "TEXT")
+        _ensure_column(connection, "agent_recommendations", "workflow_thread_id", "TEXT")
+        _ensure_column(connection, "agent_recommendations", "agent_route", "TEXT")
+        _ensure_column(connection, "agent_recommendations", "tool_calls", "TEXT")
+        _ensure_column(
+            connection,
+            "agent_recommendations",
+            "workflow_resume_status",
+            "TEXT NOT NULL DEFAULT 'not_applicable'",
         )
 
         connection.execute(
@@ -427,11 +450,47 @@ def find_similar_reports(report_id: int, limit: int = 5) -> list[dict[str, Any]]
     return scored[:limit]
 
 
+def get_human_decision_memory(
+    report_id: int,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Return concise reviewer feedback from earlier decisions in the same category."""
+    report = get_report(report_id)
+    if report is None:
+        return []
+
+    with _connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                ar.report_id,
+                ar.decision,
+                ar.reviewer_note,
+                ar.reviewed_at
+            FROM agent_recommendations AS ar
+            JOIN reports AS r ON r.id = ar.report_id
+            WHERE r.category = ?
+              AND ar.decision IN ('Modified', 'Rejected')
+              AND TRIM(COALESCE(ar.reviewer_note, '')) != ''
+            ORDER BY ar.reviewed_at DESC
+            LIMIT ?
+            """,
+            (report["category"], limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def save_agent_recommendation(
     report_id: int,
     triage_review: str,
     coordinator_review: str,
     final_recommendation: str,
+    workflow_name: str = "langgraph-functional-capstone-v2",
+    validation_notes: str = "",
+    source_citations: str = "",
+    workflow_thread_id: str = "",
+    agent_route: str = "",
+    tool_calls: str = "",
 ) -> int:
     if get_report(report_id) is None:
         raise ValueError(f"Report #{report_id} does not exist.")
@@ -464,9 +523,16 @@ def save_agent_recommendation(
                 triage_review,
                 coordinator_review,
                 final_recommendation,
-                decision
+                decision,
+                workflow_name,
+                validation_notes,
+                source_citations,
+                workflow_thread_id,
+                agent_route,
+                tool_calls,
+                workflow_resume_status
             )
-            VALUES (?, ?, ?, ?, ?, 'Pending')
+            VALUES (?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 report_id,
@@ -474,6 +540,13 @@ def save_agent_recommendation(
                 triage_review,
                 coordinator_review,
                 final_recommendation,
+                workflow_name,
+                validation_notes,
+                source_citations,
+                workflow_thread_id or None,
+                agent_route or None,
+                tool_calls or None,
+                "interrupted" if workflow_thread_id else "not_applicable",
             ),
         )
 
@@ -522,6 +595,7 @@ def review_agent_recommendation(
     decision: str,
     reviewer_note: str = "",
     actor: str = "staff",
+    workflow_resume_status: str = "completed",
 ) -> bool:
     if decision not in ALLOWED_REVIEW_DECISIONS:
         raise ValueError(f"Unsupported decision: {decision}")
@@ -556,13 +630,15 @@ def review_agent_recommendation(
             UPDATE agent_recommendations
             SET decision = ?,
                 reviewer_note = ?,
-                reviewed_at = ?
+                reviewed_at = ?,
+                workflow_resume_status = ?
             WHERE id = ?
             """,
             (
                 decision,
                 reviewer_note.strip(),
                 now,
+                workflow_resume_status,
                 recommendation_id,
             ),
         )

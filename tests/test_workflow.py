@@ -50,6 +50,9 @@ class WorkflowTests(unittest.TestCase):
 
                 recommendation = database.get_agent_recommendation(report_id)
                 self.assertEqual(recommendation["decision"], "Modified")
+                memory = database.get_human_decision_memory(report_id)
+                self.assertEqual(len(memory), 1)
+                self.assertIn("تحقق ميداني", memory[0]["reviewer_note"])
 
                 changed = database.update_report_status(
                     report_id,
