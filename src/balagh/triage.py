@@ -12,11 +12,16 @@ CATEGORY_RULES: dict[str, dict[str, object]] = {
         "department": "Traffic Signs and Road Safety",
         "keywords": [
             "speed limit sign", "speed limit", "speed sign", "traffic sign",
+            "traffic signal", "traffic light", "signal not working",
+            "traffic signal not working", "traffic light not working",
             "road sign", "missing sign", "damaged sign", "stop sign",
             "yield sign", "road marking", "lane marking", "pedestrian crossing",
             "signage", "حد السرعة", "لوحة السرعة", "لوحة تحديد السرعة",
             "علامة السرعة", "لوحة مرورية", "اللوحة المرورية", "علامة مرورية",
-            "العلامة المرورية", "إشارة مرورية", "اشارة مرورية", "لوحة مفقودة",
+            "العلامة المرورية", "إشارة مرورية", "اشارة مرورية",
+            "إشارة المرور", "اشارة المرور", "إشارة لا تعمل", "اشارة لا تعمل",
+            "الإشارة لا تعمل", "الاشارة لا تعمل", "إشارة ماتشتغل",
+            "اشارة ماتشتغل", "لوحة مفقودة",
             "علامة مفقودة", "لوحة تالفة", "دهان الطريق", "تخطيط الطريق",
             "خطوط المسارات", "ممر مشاة",
         ],
@@ -204,10 +209,12 @@ def _category_matches(report: ReportInput) -> tuple[str, str, int, list[str], st
     for category, rule in CATEGORY_RULES.items():
         score = 0
         matched: list[str] = []
+        seen_keywords: set[str] = set()
         for keyword in rule["keywords"]:
             normalized_keyword = normalize_text(keyword)
-            if not normalized_keyword:
+            if not normalized_keyword or normalized_keyword in seen_keywords:
                 continue
+            seen_keywords.add(normalized_keyword)
             is_match = (
                 normalized_keyword in text
                 if " " in normalized_keyword
@@ -248,9 +255,17 @@ def assess_priority(
 ) -> tuple[str, list[str], str | None]:
     text = normalize_text(" ".join([report.title, report.description, report.landmark]))
 
-    critical_hits = [
-        keyword for keyword in CRITICAL_KEYWORDS if normalize_text(keyword) in text
-    ]
+    def unique_hits(keywords: Sequence[str]) -> list[str]:
+        hits: list[str] = []
+        seen: set[str] = set()
+        for keyword in keywords:
+            normalized_keyword = normalize_text(keyword)
+            if normalized_keyword in text and normalized_keyword not in seen:
+                seen.add(normalized_keyword)
+                hits.append(keyword)
+        return hits
+
+    critical_hits = unique_hits(CRITICAL_KEYWORDS)
     if critical_hits:
         warning = (
             "قد يكون البلاغ مرتبطًا بخطر فوري. تواصل مع خدمة الطوارئ المحلية "
@@ -263,9 +278,7 @@ def assess_priority(
         )
         return "Critical", [reason], warning
 
-    high_hits = [
-        keyword for keyword in HIGH_KEYWORDS if normalize_text(keyword) in text
-    ]
+    high_hits = unique_hits(HIGH_KEYWORDS)
     if high_hits:
         reason = (
             "رُصد موقع حساس أو ظرف مرتفع التأثير: " + "، ".join(high_hits[:3])
@@ -325,10 +338,32 @@ def find_missing_information(
     def has_any(terms: Sequence[str]) -> bool:
         return any(normalize_text(term) in combined for term in terms)
 
-    if len(report.description.strip()) < 35:
+    traffic_signal_terms = [
+        "traffic signal", "traffic light", "إشارة المرور", "اشارة المرور",
+        "إشارة مرورية", "اشارة مرورية",
+    ]
+    is_traffic_signal = category == "Traffic Signs & Road Safety" and has_any(
+        traffic_signal_terms
+    )
+
+    if len(report.description.strip()) < 35 and not is_traffic_signal:
         missing.append(message("More detailed issue description", "وصف أكثر تفصيلًا للمشكلة"))
 
     if category == "Traffic Signs & Road Safety":
+        if is_traffic_signal:
+            intersection_terms = [
+                "intersection", "cross street", "junction", "اتجاه", "تقاطع",
+                "شارع متقاطع", "مسار",
+            ]
+            if not has_any(intersection_terms):
+                missing.append(
+                    message(
+                        "Intersection or cross street and driving direction",
+                        "اسم التقاطع أو الشارع المتقاطع واتجاه السير لتحديد الإشارة بدقة",
+                    )
+                )
+            return missing
+
         direction_terms = [
             "direction", "northbound", "southbound", "eastbound", "westbound",
             "intersection", "exit", "lane", "اتجاه", "شمال", "جنوب", "شرق",

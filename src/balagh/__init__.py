@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from flask import Flask
 
 
-__version__ = "1.2.2"
+__version__ = "2.0.2"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 

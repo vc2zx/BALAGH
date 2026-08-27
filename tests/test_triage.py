@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from balagh.triage import ReportInput, report_similarity, triage_report
+from balagh.triage import ReportInput, normalize_text, report_similarity, triage_report
 
 
 class TriageTests(unittest.TestCase):
@@ -35,6 +35,32 @@ class TriageTests(unittest.TestCase):
         self.assertIn("speed limit", result.category_evidence)
         self.assertIn("وليست أدلة ميدانية", result.reasoning)
         self.assertTrue(any("اتجاه السير" in item for item in result.missing_information))
+        self.assertFalse(any("عدد العناصر" in item for item in result.missing_information))
+        self.assertFalse(any("وقت بدء" in item for item in result.missing_information))
+
+    def test_nonworking_traffic_signal_uses_traffic_safety_category(self) -> None:
+        report = ReportInput(
+            title="اشارة المرور لاتعمل",
+            description="الاشارة على شارع عنيزة ماتشتغل",
+            city="الرياض",
+            district="الروابي",
+            landmark="مطعم الهدوج",
+        )
+        result = triage_report(report, existing_reports=[], language="Arabic")
+
+        self.assertEqual(result.category, "Traffic Signs & Road Safety")
+        self.assertEqual(result.department, "Traffic Signs and Road Safety")
+        self.assertEqual(result.priority, "High")
+        self.assertEqual(result.category_confidence, "High")
+        self.assertTrue(
+            any(
+                normalize_text(item) == normalize_text("اشارة المرور")
+                for item in result.category_evidence
+            )
+        )
+        self.assertEqual(len(result.category_evidence), 1)
+        self.assertTrue(any("التقاطع" in item for item in result.missing_information))
+        self.assertFalse(any("وصف أكثر" in item for item in result.missing_information))
         self.assertFalse(any("عدد العناصر" in item for item in result.missing_information))
         self.assertFalse(any("وقت بدء" in item for item in result.missing_information))
 

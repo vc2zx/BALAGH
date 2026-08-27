@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, TypeVar, cast
@@ -87,6 +87,8 @@ ACTION_LABELS = {
     "Triage recalculated": "إعادة الفرز الحتمي",
 }
 
+RIYADH_TIMEZONE = timezone(timedelta(hours=3), name="Asia/Riyadh")
+
 
 def _staff_required(view: ViewFunction) -> ViewFunction:
     @wraps(view)
@@ -116,14 +118,23 @@ def _format_datetime(value: object) -> str:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return str(value)
-    return parsed.strftime("%Y-%m-%d %H:%M")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(RIYADH_TIMEZONE).strftime("%Y-%m-%d %H:%M")
 
 
 def _generate_recommendation(report_id: int):
-    """Load the current CrewAI layer only when the employee requests it."""
+    """Load the LangGraph workflow only when the employee requests it."""
     from balagh.agents import generate_recommendation
 
     return generate_recommendation(report_id, language="Arabic")
+
+
+def _resume_recommendation(thread_id: str, decision: str, reviewer_note: str):
+    """Resume the paused LangGraph run only after the employee submits a decision."""
+    from balagh.agents import resume_recommendation
+
+    return resume_recommendation(thread_id, decision, reviewer_note)
 
 
 @staff_bp.app_context_processor
@@ -314,8 +325,14 @@ def create_recommendation(report_id: int):
             recommendation.triage_review,
             recommendation.coordinator_review,
             recommendation.final_recommendation,
+            workflow_name="langgraph-functional-capstone-v2",
+            validation_notes=getattr(recommendation, "validation_notes", ""),
+            source_citations=getattr(recommendation, "source_citations", ""),
+            workflow_thread_id=getattr(recommendation, "workflow_thread_id", ""),
+            agent_route=getattr(recommendation, "route", ""),
+            tool_calls=getattr(recommendation, "tool_calls", ""),
         )
-    except Exception:  # CrewAI/Ollama expose different runtime exception types.
+    except Exception:  # LangGraph/Ollama expose different runtime exception types.
         current_app.logger.exception("Agent recommendation failed for report %s", report_id)
         flash("تعذر تشغيل الوكلاء. راجع سجل الخادم للتفاصيل.", "error")
     else:
@@ -341,15 +358,27 @@ def review_recommendation(report_id: int, recommendation_id: int):
         flash("اكتب ملاحظة توضّح التعديل المطلوب.", "error")
         return redirect(url_for("staff.review", report_id=report_id))
 
+    workflow_thread_id = str(stored.get("workflow_thread_id") or "").strip()
     try:
+        if workflow_thread_id:
+            _resume_recommendation(workflow_thread_id, decision, reviewer_note)
         database.review_agent_recommendation(
             recommendation_id,
             decision,
             reviewer_note,
             actor="staff",
+            workflow_resume_status=(
+                "completed" if workflow_thread_id else "not_applicable"
+            ),
         )
     except ValueError:
         flash("تعذر تسجيل القرار؛ ربما سبق أن روجعت التوصية.", "error")
+    except Exception:
+        current_app.logger.exception(
+            "Recommendation workflow resume failed for recommendation %s",
+            recommendation_id,
+        )
+        flash("تعذر استئناف سير المراجعة؛ بقيت التوصية معلقة دون تسجيل القرار.", "error")
     else:
         flash("تم تسجيل قرار الموظف في سجل الحالة.", "success")
 

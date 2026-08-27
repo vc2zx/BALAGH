@@ -33,7 +33,7 @@ def build_agent_case_context(
     stored_report: Mapping[str, object],
     language: str,
 ) -> dict[str, Any]:
-    """Build an unambiguous, read-only case payload for both agents and their tools."""
+    """Build an unambiguous, read-only case payload for the agent workflow."""
     report = ReportInput(
         title=str(stored_report.get("title", "")),
         description=str(stored_report.get("description", "")),

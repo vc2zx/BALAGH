@@ -42,7 +42,7 @@
             <div class="panel-heading">
                 <div><p class="eyebrow">طبقة حتمية</p><h2>نتيجة الفرز الأولي</h2></div>
                 <form method="post" action="{{ url_for('staff.retriage', report_id=report.id) }}">
-                    <button class="secondary-button" type="submit">إعادة الفرز بالقواعد الحالية</button>
+                    <button class="secondary-button" type="submit">إعادة الفرز </button>
                 </form>
             </div>
             <div class="triage-grid">
@@ -53,7 +53,7 @@
             </div>
             <h3>مبررات الفرز</h3>
             <p class="long-text">{{ report.reasoning }}</p>
-            {% if report.category_evidence %}<div class="alert info"><strong>أدلة التصنيف:</strong> {{ report.category_evidence }}</div>{% endif %}
+            {% if report.category_evidence %}<div class="alert info"><strong>الكلمات المفتاحية المطابقة:</strong> {{ report.category_evidence }}</div>{% endif %}
             {% if report.missing_information %}<div class="alert info"><strong>معلومات مقترح استكمالها:</strong> {{ report.missing_information }}</div>{% endif %}
             {% if report.duplicate_of %}<div class="alert info">بلاغ مشابه محتمل: BLG-{{ "%05d"|format(report.duplicate_of) }} — نسبة التشابه {{ "%.0f%%"|format(report.duplicate_score * 100) }}</div>{% endif %}
         </section>
@@ -63,8 +63,10 @@
                 <div><p class="eyebrow">توصية استشارية</p><h2>مراجعة الذكاء الاصطناعي</h2></div>
                 {% if not recommendation or recommendation.decision != 'Pending' %}
                 <form method="post" action="{{ url_for('staff.create_recommendation', report_id=report.id) }}">
-                    <button class="primary-button" type="submit">تشغيل الوكيلين</button>
+                    <button class="primary-button" type="submit">تشغيل مراجعة الذكاء الاصطناعي</button>
                 </form>
+                {% else %}
+                <span class="muted">راجع التوصية المعلقة وسجّل القرار قبل إنشاء تشغيل جديد.</span>
                 {% endif %}
             </div>
             <p class="muted">الذكاء الاصطناعي يحلل ويقترح فقط. القرار التنفيذي يبقى بيد الموظف.</p>
@@ -75,9 +77,20 @@
                     <span class="pill decision-{{ recommendation.decision|lower }}">{{ decision_label(recommendation.decision) }}</span>
                     <span>التوصية #{{ recommendation.id }} · {{ format_datetime(recommendation.created_at) }}</span>
                 </div>
+                {% if recommendation.workflow_thread_id %}
+                <details>
+                    <summary>دليل سير LangGraph</summary>
+                    <dl class="detail-grid compact-grid">
+                        <div><dt>المسار</dt><dd>{{ recommendation.agent_route or '—' }}</dd></div>
+                        <div><dt>حالة الاستئناف</dt><dd>{{ recommendation.workflow_resume_status }}</dd></div>
+                        <div><dt>معرّف Thread</dt><dd>{{ recommendation.workflow_thread_id }}</dd></div>
+                        <div><dt>الأدوات المختارة</dt><dd>{{ recommendation.tool_calls or 'لم يطلب النموذج أداة إضافية' }}</dd></div>
+                    </dl>
+                </details>
+                {% endif %}
                 <p class="recommendation-text">{{ recommendation.final_recommendation }}</p>
-                <details><summary>تحليل وكيل الفرز والتوجيه</summary><p class="long-text">{{ recommendation.triage_review }}</p></details>
-                <details><summary>تحليل وكيل تنسيق الحالة</summary><p class="long-text">{{ recommendation.coordinator_review }}</p></details>
+                <details><summary>مراجعة وكيل تدقيق الفرز</summary><p class="long-text">{{ recommendation.triage_review }}</p></details>
+                {% if recommendation.validation_notes %}<details><summary>سجل تحقق النظام</summary><p class="long-text">{{ recommendation.validation_notes }}</p></details>{% endif %}
             </article>
 
             {% if recommendation.decision == 'Pending' %}
@@ -129,7 +142,6 @@
                 <button class="primary-button" type="submit">حفظ الحالة</button>
             </form>
             <hr>
-            <p class="workflow-rule">AI recommends<br>Human approves<br>System records</p>
         </section>
     </aside>
 </div>

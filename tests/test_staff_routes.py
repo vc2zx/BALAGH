@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import balagh.database as database
 from balagh import create_app
+from balagh.staff_routes import _format_datetime
 from balagh.triage import ReportInput, triage_report
 
 
@@ -55,6 +56,12 @@ class StaffRouteTests(unittest.TestCase):
             "/staff/login",
             data={"access_code": code},
             follow_redirects=follow_redirects,
+        )
+
+    def test_utc_timestamp_is_displayed_in_riyadh_time(self) -> None:
+        self.assertEqual(
+            _format_datetime("2026-08-27T06:16:00+00:00"),
+            "2026-08-27 09:16",
         )
 
     def test_staff_pages_require_login(self) -> None:
@@ -156,6 +163,11 @@ class StaffRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("تم إنشاء التوصية".encode(), response.data)
+        self.assertIn("راجع التوصية المعلقة".encode(), response.data)
+        recommendation_action = (
+            f'action="/staff/reports/{self.report_id}/recommendations"'.encode()
+        )
+        self.assertNotIn(recommendation_action, response.data)
         stored = database.get_agent_recommendation(self.report_id)
         self.assertEqual(stored["decision"], "Pending")
 
@@ -166,6 +178,7 @@ class StaffRouteTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn("تم تسجيل قرار الموظف".encode(), response.data)
+        self.assertIn(recommendation_action, response.data)
         self.assertEqual(
             database.get_agent_recommendation(self.report_id)["decision"],
             "Modified",
@@ -187,6 +200,34 @@ class StaffRouteTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn("اكتب ملاحظة".encode(), response.data)
+        self.assertEqual(
+            database.get_agent_recommendation(self.report_id)["decision"],
+            "Pending",
+        )
+
+    def test_failed_langgraph_resume_keeps_recommendation_pending(self) -> None:
+        self._login()
+        recommendation_id = database.save_agent_recommendation(
+            self.report_id,
+            "مراجعة الفرز",
+            "مراجعة التنسيق",
+            "التوصية النهائية",
+            workflow_thread_id="thread-resume-test",
+            agent_route="municipal_operations",
+        )
+
+        with patch(
+            "balagh.staff_routes._resume_recommendation",
+            side_effect=RuntimeError("checkpoint unavailable"),
+        ):
+            response = self.client.post(
+                f"/staff/reports/{self.report_id}/recommendations/{recommendation_id}/review",
+                data={"decision": "Approved", "reviewer_note": ""},
+                follow_redirects=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("تعذر استئناف سير المراجعة".encode(), response.data)
         self.assertEqual(
             database.get_agent_recommendation(self.report_id)["decision"],
             "Pending",

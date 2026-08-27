@@ -68,6 +68,38 @@ class DatabaseTests(unittest.TestCase):
                 self.assertEqual(stored["id"], report_id)
                 self.assertIsNone(database.get_report_by_tracking_hash("wrong-hash"))
 
+    def test_recommendation_persists_workflow_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            with (
+                patch.object(database, "DATA_DIR", temp_path),
+                patch.object(database, "DB_PATH", temp_path / "test.db"),
+            ):
+                database.init_db()
+                report = ReportInput(
+                    title="لوحة سرعة مفقودة",
+                    description="لا توجد لوحة تحدد السرعة على الطريق",
+                    city="الرياض",
+                    district="الملز",
+                    landmark="طريق عبدالله",
+                )
+                result = triage_report(report, [], "Arabic")
+                report_id = database.create_report(report, result, "Arabic")
+                database.save_agent_recommendation(
+                    report_id,
+                    "audit",
+                    "plan",
+                    "recommendation",
+                    workflow_thread_id="thread-test",
+                    agent_route="traffic_safety",
+                    tool_calls="load_case_record | retrieve_official_guidance",
+                )
+
+                stored = database.get_agent_recommendation(report_id)
+                self.assertEqual(stored["workflow_thread_id"], "thread-test")
+                self.assertEqual(stored["agent_route"], "traffic_safety")
+                self.assertEqual(stored["workflow_resume_status"], "interrupted")
+
 
 if __name__ == "__main__":
     unittest.main()
