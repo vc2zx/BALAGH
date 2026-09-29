@@ -227,11 +227,21 @@ class StaffRouteTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("تعذر استئناف سير المراجعة".encode(), response.data)
+        self.assertIn("تعذر استئناف المراجعة".encode(), response.data)
         self.assertEqual(
             database.get_agent_recommendation(self.report_id)["decision"],
             "Pending",
         )
+
+        discarded = self.client.post(
+            f"/staff/reports/{self.report_id}/recommendations/{recommendation_id}/discard",
+            follow_redirects=True,
+        )
+        self.assertEqual(discarded.status_code, 200)
+        self.assertEqual(database.get_agent_recommendation(self.report_id)["decision"], "Discarded")
+        self.assertEqual(database.get_report(self.report_id)["status"], "Open")
+        self.assertIn("Recommendation discarded", database.get_case_history(self.report_id)["action"].tolist())
+        self.assertIn(f'action="/staff/reports/{self.report_id}/recommendations"'.encode(), discarded.data)
 
     def test_logout_clears_staff_session(self) -> None:
         self._login()

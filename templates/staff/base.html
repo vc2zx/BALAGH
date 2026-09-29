@@ -21,6 +21,7 @@
             <a class="{{ 'active' if request.endpoint in ('staff.reports', 'staff.review') else '' }}" href="{{ url_for('staff.reports') }}">البلاغات</a>
         </nav>
         <form method="post" action="{{ url_for('staff.logout') }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
             <button class="link-button" type="submit">تسجيل الخروج</button>
         </form>
     </header>

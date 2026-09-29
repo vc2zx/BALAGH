@@ -18,6 +18,8 @@ from balagh.agents import (
     _canonical_plan,
     _extract_interrupt_draft,
     build_recommendation_workflow,
+    resume_recommendation,
+    start_recommendation,
 )
 from balagh.triage import ReportInput, triage_report
 
@@ -223,6 +225,33 @@ class AgentWorkflowTests(unittest.TestCase):
                     "تحقق ميداني",
                     second_draft["long_term_memory"][0]["reviewer_note"],
                 )
+
+    def test_lost_process_checkpoint_cannot_record_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            with (patch.object(database, "DATA_DIR", temp_path),
+                  patch.object(database, "DB_PATH", temp_path / "workflow.db")):
+                database.init_db()
+                report_id = self._create_speed_sign_report()
+                active = build_recommendation_workflow(
+                    _FakeModel(), checkpointer=InMemorySaver(),
+                    store=InMemoryStore(), knowledge_base=_FakeKnowledgeBase(),
+                )
+                draft = start_recommendation(report_id, workflow=active)
+                rec_id = database.save_agent_recommendation(
+                    report_id, draft.triage_review, draft.coordinator_review,
+                    draft.final_recommendation,
+                    workflow_thread_id=draft.workflow_thread_id,
+                )
+                restarted = build_recommendation_workflow(
+                    _FakeModel(), checkpointer=InMemorySaver(),
+                    store=InMemoryStore(), knowledge_base=_FakeKnowledgeBase(),
+                )
+                with self.assertRaises(RuntimeError):
+                    resume_recommendation(draft.workflow_thread_id, "Approved", workflow=restarted)
+                self.assertEqual(database.get_agent_recommendation(report_id)["decision"], "Pending")
+                self.assertTrue(database.discard_pending_recommendation(rec_id))
+                self.assertEqual(database.get_agent_recommendation(report_id)["decision"], "Discarded")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@
     {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
 
     <form class="login-form" method="post">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="next" value="{{ next_url }}">
         <label for="access_code">رمز الوصول</label>
         <input id="access_code" name="access_code" type="password" autocomplete="current-password" required autofocus>

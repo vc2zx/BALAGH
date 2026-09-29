@@ -42,6 +42,7 @@
             <div class="panel-heading">
                 <div><p class="eyebrow">طبقة حتمية</p><h2>نتيجة الفرز الأولي</h2></div>
                 <form method="post" action="{{ url_for('staff.retriage', report_id=report.id) }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                     <button class="secondary-button" type="submit">إعادة الفرز </button>
                 </form>
             </div>
@@ -49,7 +50,7 @@
                 <div><span>التصنيف</span><strong>{{ category_label(report.category) }}</strong></div>
                 <div><span>ثقة التصنيف</span><strong>{{ confidence_label(report.category_confidence) }}</strong></div>
                 <div><span>الأولوية</span><strong>{{ priority_label(report.priority) }}</strong></div>
-                <div><span>الجهة</span><strong>{{ department_label(report.department) }}</strong></div>
+                <div><span>مسار إحالة مقترح</span><strong>{{ department_label(report.department) }}</strong></div>
             </div>
             <h3>مبررات الفرز</h3>
             <p class="long-text">{{ report.reasoning }}</p>
@@ -63,6 +64,7 @@
                 <div><p class="eyebrow">توصية استشارية</p><h2>مراجعة الذكاء الاصطناعي</h2></div>
                 {% if not recommendation or recommendation.decision != 'Pending' %}
                 <form method="post" action="{{ url_for('staff.create_recommendation', report_id=report.id) }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                     <button class="primary-button" type="submit">تشغيل مراجعة الذكاء الاصطناعي</button>
                 </form>
                 {% else %}
@@ -70,6 +72,7 @@
                 {% endif %}
             </div>
             <p class="muted">الذكاء الاصطناعي يحلل ويقترح فقط. القرار التنفيذي يبقى بيد الموظف.</p>
+            <p class="muted">أسماء الأقسام هنا تسميات نموذجية داخلية؛ لا تعني صلاحية إحالة إلى جهة حكومية. يعتمد الموظف التوصية أو يرفضها ثم يحدّث حالة البلاغ بصورة منفصلة.</p>
 
             {% if recommendation %}
             <article class="recommendation-card">
@@ -89,12 +92,29 @@
                 </details>
                 {% endif %}
                 <p class="recommendation-text">{{ recommendation.final_recommendation }}</p>
+                <details>
+                    <summary>المراجع المسترجعة والنصوص المحلية المستخدمة</summary>
+                    <p>النصوص أدناه ملاحظات محلية ملخصة من الصفحات المرتبطة، وليست إثباتًا لكل جملة في التوصية. افتح الصفحة الأصلية للتحقق.</p>
+                    {% if source_evidence %}
+                    <ul>{% for source in source_evidence %}<li><strong>[{{ source.id }}] {{ source.title }}</strong><p>{{ source.guidance }}</p><a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">فتح المصدر</a></li>{% endfor %}</ul>
+                    {% elif source_links %}
+                    <ul>{% for source in source_links %}<li>[{{ source.id }}] <a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.url }}</a></li>{% endfor %}</ul>
+                    {% else %}<p>لا توجد مراجع مسجلة لهذه التوصية؛ تحقق من الادعاءات يدويًا.</p>{% endif %}
+                </details>
                 <details><summary>مراجعة وكيل تدقيق الفرز</summary><p class="long-text">{{ recommendation.triage_review }}</p></details>
                 {% if recommendation.validation_notes %}<details><summary>سجل تحقق النظام</summary><p class="long-text">{{ recommendation.validation_notes }}</p></details>{% endif %}
             </article>
 
             {% if recommendation.decision == 'Pending' %}
+            {% if recommendation.workflow_thread_id %}
+            <p class="muted">إذا أُعيد تشغيل الخادم وفُقدت حالة الاستئناف، استبعد هذه المسودة وأنشئ واحدة جديدة. الاستبعاد لا يعتمد التوصية ولا يغيّر حالة البلاغ.</p>
+            <form method="post" action="{{ url_for('staff.discard_recommendation', report_id=report.id, recommendation_id=recommendation.id) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                <button class="secondary-button" type="submit">استبعاد المسودة المعلقة</button>
+            </form>
+            {% endif %}
             <form class="decision-form" method="post" action="{{ url_for('staff.review_recommendation', report_id=report.id, recommendation_id=recommendation.id) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                 <fieldset>
                     <legend>قرار الموظف</legend>
                     <label><input type="radio" name="decision" value="Approved" required> اعتماد</label>
@@ -135,6 +155,7 @@
         <section class="staff-panel sticky-panel">
             <h2>تحديث الحالة</h2>
             <form class="status-form" method="post" action="{{ url_for('staff.update_status', report_id=report.id) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                 <label for="status">الحالة الحالية</label>
                 <select id="status" name="status">
                     {% for value in statuses %}<option value="{{ value }}" {{ 'selected' if report.status == value else '' }}>{{ status_label(value) }}</option>{% endfor %}

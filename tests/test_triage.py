@@ -90,6 +90,18 @@ class TriageTests(unittest.TestCase):
         self.assertEqual(result.priority, "Critical")
         self.assertIsNotNone(result.emergency_warning)
 
+    def test_negated_emergency_does_not_trigger_critical(self) -> None:
+        report = ReportInput("لا يوجد حريق", "لا يوجد حريق، توجد نفايات قرب الحديقة", "الرياض", "الملز")
+        self.assertNotEqual(triage_report(report, language="Arabic").priority, "Critical")
+
+    def test_distinct_landmarks_in_same_district_are_not_duplicate(self) -> None:
+        score = report_similarity(
+            "حفرة في الرصيف", "حفرة كبيرة تعيق المشاة", "الرياض", "الروابي",
+            "حفرة في الرصيف", "حفرة كبيرة تعيق المشاة", "الرياض", "الروابي",
+            first_landmark="بجوار الحديقة", second_landmark="مقابل المستشفى",
+        )
+        self.assertEqual(score, 0.0)
+
     def test_duplicate_similarity(self) -> None:
         score = report_similarity(
             "حفرة كبيرة في الشارع",

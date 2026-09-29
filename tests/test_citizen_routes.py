@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import tempfile
+from io import BytesIO
 import unittest
 from importlib.util import find_spec
 from pathlib import Path
 from unittest.mock import patch
+from PIL import Image, PngImagePlugin
 
 import balagh.database as database
 from balagh import create_app
@@ -72,6 +74,42 @@ class CitizenRouteTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn("لم يتم العثور على بلاغ بهذا الرمز".encode(), response.data)
+
+    def test_fake_image_content_is_rejected(self) -> None:
+        response = self.client.post("/citizen/", data={
+            "title": "حفرة في الطريق", "description": "حفرة كبيرة في الطريق قرب الحديقة",
+            "city": "الرياض", "district": "الروابي",
+            "attachment": (BytesIO(b"not a PNG"), "photo.png", "image/png"),
+        }, content_type="multipart/form-data")
+        self.assertIn("ملف الصورة غير صالح".encode(), response.data)
+        self.assertTrue(database.get_reports().empty)
+
+    def test_valid_image_is_reencoded_without_metadata(self) -> None:
+        content = BytesIO()
+        metadata = PngImagePlugin.PngInfo()
+        metadata.add_text("Comment", "synthetic private note")
+        Image.new("RGB", (8, 8), "red").save(content, format="PNG", pnginfo=metadata)
+        content.seek(0)
+        response = self.client.post("/citizen/", data={
+            "title": "حفرة في الطريق", "description": "حفرة كبيرة في الطريق قرب الحديقة",
+            "city": "الرياض", "district": "الروابي",
+            "attachment": (content, "photo.png", "image/png"),
+        }, content_type="multipart/form-data")
+        self.assertEqual(response.status_code, 302)
+        report_id = int(database.get_reports().iloc[0]["id"])
+        with Image.open(database.get_report(report_id)["attachment_path"]) as saved:
+            self.assertEqual(saved.size, (8, 8))
+            self.assertNotIn("Comment", saved.info)
+
+    def test_csrf_required_when_enabled(self) -> None:
+        self.app.config["CSRF_ENABLED"] = True
+        response = self.client.post("/citizen/", data={"title": "example"})
+        self.assertEqual(response.status_code, 400)
+        self.client.get("/citizen/")
+        with self.client.session_transaction() as user_session:
+            token = user_session["csrf_token"]
+        response = self.client.post("/citizen/", data={"_csrf_token": token})
+        self.assertEqual(response.status_code, 200)
 
 
 if __name__ == "__main__":

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
 from flask import Blueprint, redirect, render_template, request, session, url_for
 from werkzeug.datastructures import FileStorage
+from PIL import Image, UnidentifiedImageError
 
 from balagh import database
 from balagh.triage import ReportInput, triage_report
@@ -16,6 +18,11 @@ citizen_bp = Blueprint("citizen", __name__, url_prefix="/citizen")
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
+IMAGE_FORMATS = {
+    "JPEG": ({".jpg", ".jpeg"}, "image/jpeg"),
+    "PNG": ({".png"}, "image/png"),
+    "WEBP": ({".webp"}, "image/webp"),
+}
 
 
 def _tracking_hash(tracking_code: str) -> str:
@@ -35,10 +42,29 @@ def _save_attachment(upload: FileStorage | None) -> str | None:
     if suffix not in ALLOWED_IMAGE_EXTENSIONS or upload.mimetype not in ALLOWED_IMAGE_MIMES:
         raise ValueError("يجب أن يكون المرفق صورة JPG أو PNG أو WEBP.")
 
+    try:
+        payload = upload.stream.read()
+        with Image.open(BytesIO(payload)) as image:
+            image.verify()
+        with Image.open(BytesIO(payload)) as image:
+            if image.format not in IMAGE_FORMATS:
+                raise ValueError("تعذر التحقق من نوع الصورة.")
+            valid_suffixes, valid_mime = IMAGE_FORMATS[image.format]
+            if suffix not in valid_suffixes or upload.mimetype != valid_mime:
+                raise ValueError("امتداد الصورة ونوعها الفعلي غير متطابقين.")
+            if image.width * image.height > 12_000_000:
+                raise ValueError("أبعاد الصورة كبيرة جدًا؛ الحد 12 مليون بكسل.")
+            image.load()
+            cleaned = image.convert("RGB" if image.format == "JPEG" else "RGBA")
+            output = BytesIO()
+            cleaned.save(output, format=image.format)
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+        raise ValueError("ملف الصورة غير صالح أو تالف.") from exc
+
     upload_dir = database.DATA_DIR / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
     destination = upload_dir / f"{uuid4().hex}{suffix}"
-    upload.save(destination)
+    destination.write_bytes(output.getvalue())
     return str(destination)
 
 

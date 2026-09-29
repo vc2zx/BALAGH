@@ -119,6 +119,7 @@ def init_db() -> None:
                 workflow_name TEXT NOT NULL DEFAULT 'legacy',
                 validation_notes TEXT,
                 source_citations TEXT,
+                source_evidence TEXT,
                 workflow_thread_id TEXT,
                 agent_route TEXT,
                 tool_calls TEXT,
@@ -135,6 +136,7 @@ def init_db() -> None:
         )
         _ensure_column(connection, "agent_recommendations", "validation_notes", "TEXT")
         _ensure_column(connection, "agent_recommendations", "source_citations", "TEXT")
+        _ensure_column(connection, "agent_recommendations", "source_evidence", "TEXT")
         _ensure_column(connection, "agent_recommendations", "workflow_thread_id", "TEXT")
         _ensure_column(connection, "agent_recommendations", "agent_route", "TEXT")
         _ensure_column(connection, "agent_recommendations", "tool_calls", "TEXT")
@@ -278,7 +280,7 @@ def get_open_reports() -> list[dict[str, Any]]:
     with _connection() as connection:
         rows = connection.execute(
             """
-            SELECT id, title, description, city, district
+            SELECT id, title, description, city, district, landmark
             FROM reports
             WHERE status IN ('Open', 'In Progress')
             ORDER BY id DESC
@@ -421,7 +423,7 @@ def find_similar_reports(report_id: int, limit: int = 5) -> list[dict[str, Any]]
     with _connection() as connection:
         rows = connection.execute(
             """
-            SELECT id, title, description, city, district, status
+            SELECT id, title, description, city, district, landmark, status
             FROM reports
             WHERE id != ?
             """,
@@ -439,6 +441,8 @@ def find_similar_reports(report_id: int, limit: int = 5) -> list[dict[str, Any]]
             row["description"],
             row["city"],
             row["district"],
+            first_landmark=target.get("landmark") or "",
+            second_landmark=row["landmark"] or "",
         )
         if score <= 0:
             continue
@@ -488,6 +492,7 @@ def save_agent_recommendation(
     workflow_name: str = "langgraph-functional-capstone-v2",
     validation_notes: str = "",
     source_citations: str = "",
+    source_evidence: str = "",
     workflow_thread_id: str = "",
     agent_route: str = "",
     tool_calls: str = "",
@@ -527,12 +532,13 @@ def save_agent_recommendation(
                 workflow_name,
                 validation_notes,
                 source_citations,
+                source_evidence,
                 workflow_thread_id,
                 agent_route,
                 tool_calls,
                 workflow_resume_status
             )
-            VALUES (?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 report_id,
@@ -543,6 +549,7 @@ def save_agent_recommendation(
                 workflow_name,
                 validation_notes,
                 source_citations,
+                source_evidence,
                 workflow_thread_id or None,
                 agent_route or None,
                 tool_calls or None,
@@ -590,6 +597,34 @@ def get_agent_recommendation(report_id: int) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def discard_pending_recommendation(recommendation_id: int, actor: str = "staff") -> bool:
+    """Retire an unresumable draft without recording an operational decision."""
+    with _connection() as connection:
+        row = connection.execute(
+            "SELECT report_id, decision FROM agent_recommendations WHERE id = ?",
+            (recommendation_id,),
+        ).fetchone()
+        if row is None or row["decision"] != "Pending":
+            return False
+        now = _now()
+        changed = connection.execute(
+            """UPDATE agent_recommendations
+               SET decision = 'Discarded', workflow_resume_status = 'unavailable',
+                   reviewed_at = ? WHERE id = ? AND decision = 'Pending'""",
+            (now, recommendation_id),
+        )
+        if changed.rowcount != 1:
+            return False
+        connection.execute(
+            """INSERT INTO case_history (report_id, created_at, actor, action, details)
+               VALUES (?, ?, ?, 'Recommendation discarded', ?)""",
+            (int(row["report_id"]), now, actor,
+             f"Recommendation #{recommendation_id} discarded; no staff decision or case status changed."),
+        )
+        connection.commit()
+        return True
+
+
 def review_agent_recommendation(
     recommendation_id: int,
     decision: str,
@@ -625,14 +660,14 @@ def review_agent_recommendation(
 
         now = _now()
 
-        connection.execute(
+        changed = connection.execute(
             """
             UPDATE agent_recommendations
             SET decision = ?,
                 reviewer_note = ?,
                 reviewed_at = ?,
                 workflow_resume_status = ?
-            WHERE id = ?
+            WHERE id = ? AND decision = 'Pending'
             """,
             (
                 decision,
@@ -642,6 +677,8 @@ def review_agent_recommendation(
                 recommendation_id,
             ),
         )
+        if changed.rowcount != 1:
+            raise ValueError("This recommendation has already been reviewed.")
 
         connection.execute(
             """
