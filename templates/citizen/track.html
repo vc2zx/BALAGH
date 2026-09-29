@@ -10,6 +10,7 @@
 </section>
 
 <form class="tracking-form" method="post">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
     <label for="tracking_code">رمز المتابعة</label>
     <input id="tracking_code" name="tracking_code" value="{{ tracking_code }}" autocomplete="off" placeholder="مثال: A1B2C3D4E5" required>
     <button class="primary-button" type="submit">عرض الحالة</button>
@@ -27,11 +28,12 @@
         <span class="status">{{ status_ar(report.status) }}</span>
     </div>
     <dl>
-        <div><dt>التصنيف</dt><dd>{{ category_ar(report.category) }}</dd></div>
-        <div><dt>الأولوية</dt><dd>{{ priority_ar(report.priority) }}</dd></div>
+        <div><dt>تصنيف مقترح</dt><dd>{{ category_ar(report.category) }}</dd></div>
+        <div><dt>أولوية مقترحة</dt><dd>{{ priority_ar(report.priority) }}</dd></div>
         <div><dt>المدينة</dt><dd>{{ report.city }}</dd></div>
         <div><dt>الحي</dt><dd>{{ report.district }}</dd></div>
     </dl>
+    <p>الحالة أعلاه يحدّثها الموظف. التصنيف والأولوية اقتراح أولي وليسا قرار إحالة معتمدًا.</p>
 </section>
 {% endif %}
 {% endblock %}

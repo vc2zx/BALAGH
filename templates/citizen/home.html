@@ -19,6 +19,7 @@
 {% endif %}
 
 <form class="report-form" method="post" enctype="multipart/form-data" novalidate>
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
     <div class="field full-width">
         <label for="title">عنوان البلاغ</label>
         <input id="title" name="title" maxlength="120" value="{{ values.title }}" placeholder="مثال: حفرة كبيرة في الشارع" required>

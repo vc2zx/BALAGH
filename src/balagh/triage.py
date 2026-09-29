@@ -193,15 +193,13 @@ def _tokens(text: str) -> set[str]:
 
 
 def _category_matches(report: ReportInput) -> tuple[str, str, int, list[str], str]:
-    text = normalize_text(
-        " ".join([
-            report.title,
-            report.description,
-            report.city,
-            report.district,
-            report.landmark,
-        ])
-    )
+    # Place names and landmarks can contain category words (for example,
+    # "near the park"); only the reported issue determines the category.
+    text = normalize_text(f"{report.title} {report.description}")
+
+    # A gas leak is a safety signal, but it is not evidence of a water leak.
+    if "تسرب غاز" in text or "gas leak" in text:
+        return "Needs Human Classification", "Triage Review Queue", 0, [], "None"
 
     text_tokens = set(text.split())
     candidates: list[tuple[int, str, str, list[str]]] = []
@@ -260,9 +258,21 @@ def assess_priority(
         seen: set[str] = set()
         for keyword in keywords:
             normalized_keyword = normalize_text(keyword)
-            if normalized_keyword in text and normalized_keyword not in seen:
+            if normalized_keyword in seen:
+                continue
+            # Match whole words, while accepting the Arabic definite article.
+            prefix = r"(?:ال)?" if "\u0600" <= normalized_keyword[0] <= "\u06ff" else ""
+            pattern = re.compile(rf"(?<!\w){prefix}{re.escape(normalized_keyword)}(?!\w)")
+            for match in pattern.finditer(text):
+                preceding = text[max(0, match.start() - 32):match.start()]
+                if re.search(
+                    r"(?:لا يوجد|لا توجد|ليس هناك|ما فيه|بدون|لم يحدث|no|not|without)\s+(?:\w+\s+){0,2}$",
+                    preceding,
+                ):
+                    continue
                 seen.add(normalized_keyword)
                 hits.append(keyword)
+                break
         return hits
 
     critical_hits = unique_hits(CRITICAL_KEYWORDS)
@@ -352,8 +362,7 @@ def find_missing_information(
     if category == "Traffic Signs & Road Safety":
         if is_traffic_signal:
             intersection_terms = [
-                "intersection", "cross street", "junction", "اتجاه", "تقاطع",
-                "شارع متقاطع", "مسار",
+                "cross street", "شارع متقاطع", "شمال", "جنوب", "شرق", "غرب",
             ]
             if not has_any(intersection_terms):
                 missing.append(
@@ -365,9 +374,8 @@ def find_missing_information(
             return missing
 
         direction_terms = [
-            "direction", "northbound", "southbound", "eastbound", "westbound",
-            "intersection", "exit", "lane", "اتجاه", "شمال", "جنوب", "شرق",
-            "غرب", "تقاطع", "مخرج", "مسار",
+            "northbound", "southbound", "eastbound", "westbound",
+            "شمال", "جنوب", "شرق", "غرب",
         ]
         if not has_any(direction_terms):
             missing.append(
@@ -422,6 +430,9 @@ def report_similarity(
     second_description: str,
     second_city: str,
     second_district: str,
+    *,
+    first_landmark: str = "",
+    second_landmark: str = "",
 ) -> float:
     first_city_norm = normalize_text(first_city)
     second_city_norm = normalize_text(second_city)
@@ -432,6 +443,14 @@ def report_similarity(
         return 0.0
 
     if first_district_norm != second_district_norm:
+        return 0.0
+
+    # Two explicit, distinct landmarks in the same district are not enough
+    # evidence for a duplicate suggestion, even if descriptions match.
+    generic_place_words = {"قرب", "near", "مقابل", "امام", "أمام", "عند", "طريق", "road"}
+    first_place = _tokens(first_landmark) - generic_place_words
+    second_place = _tokens(second_landmark) - generic_place_words
+    if first_place and second_place and not (first_place & second_place):
         return 0.0
 
     location_score = 1.0
@@ -470,6 +489,8 @@ def detect_duplicate(
             str(existing.get("description", "")),
             str(existing.get("city", "")),
             str(existing.get("district", "")),
+            first_landmark=report.landmark,
+            second_landmark=str(existing.get("landmark", "")),
         )
         if score > best_score:
             best_score = score
@@ -503,8 +524,9 @@ def build_acknowledgment(
         )
         return (
             f"تم استلام بلاغك عن «{report.title}» في حي {report.district}. "
-            f"صُنّف البلاغ ضمن {category_label} وبأولوية {priority_label}، "
-            f"وسيُوجّه إلى {department_label}{duplicate_note}"
+            f"التصنيف والأولوية المقترحان: {category_label}، {priority_label}. "
+            f"مسار المراجعة المقترح: {department_label}{duplicate_note} "
+            "لا تُنفذ إحالة أو معالجة إلا بعد مراجعة الموظف."
         )
 
     duplicate_note = (
@@ -514,8 +536,9 @@ def build_acknowledgment(
     )
     return (
         f"Your report '{report.title}' in {report.district} was received. "
-        f"It was classified as {category} with {priority} priority and routed "
-        f"to {department}.{duplicate_note}"
+        f"Suggested classification: {category}; suggested priority: {priority}; "
+        f"suggested review queue: {department}.{duplicate_note} "
+        "Staff must review before any operational action."
     )
 
 

@@ -101,6 +101,7 @@ class AgentRecommendation:
     workflow_thread_id: str
     route: str
     tool_calls: str
+    source_evidence: str = ""
 
 
 _MEMORY_NAMESPACE = ("balagh", "human_reviews")
@@ -314,22 +315,22 @@ def _canonical_plan(context: dict[str, Any]) -> ActionPlan:
     if preview["category"] == "Traffic Signs & Road Safety":
         if is_traffic_signal:
             next_action = (
-                f"استكمال تحديد التقاطع والاتجاه في {location}، ثم إحالة البلاغ ذي "
-                f"الأولوية المرتفعة إلى {department_label} للتحقق الفني والمعاينة "
+                f"استكمال تحديد التقاطع والاتجاه في {location}، ثم عرض البلاغ ذي "
+                f"الأولوية المرتفعة على مسار مراجعة نموذجي ({department_label}) للتحقق الفني والمعاينة "
                 f"الميدانية لعطل إشارة المرور واتخاذ إجراء السلامة المناسب."
                 f"{duplicate_instruction}"
             )
         else:
             next_action = (
-                f"استكمال بيانات تحديد الموقع في {location}، ثم إحالة البلاغ إلى "
-                f"{department_label} لمطابقة الموقع مع المخطط المروري المعتمد أو المرجع الفني "
+                f"استكمال بيانات تحديد الموقع في {location}، ثم عرض البلاغ على "
+                f"مسار مراجعة نموذجي ({department_label}) لمطابقة الموقع مع المخطط المروري المعتمد أو المرجع الفني "
                 f"المعتمد وإجراء معاينة ميدانية دون افتراض النتيجة مسبقًا."
                 f"{duplicate_instruction}"
             )
     else:
         next_action = (
-            f"التحقق من بيانات البلاغ وموقعه في {location}، ثم إحالته إلى "
-            f"{department_label} للمعاينة وتحديد الإجراء المناسب وفق المرجع المعتمد."
+            f"التحقق من بيانات البلاغ وموقعه في {location}، ثم عرضه على "
+            f"مسار مراجعة نموذجي ({department_label}) للمعاينة وتحديد الإجراء المناسب وفق المرجع المعتمد."
             f"{duplicate_instruction}"
         )
 
@@ -337,12 +338,12 @@ def _canonical_plan(context: dict[str, Any]) -> ActionPlan:
         citizen_update = (
             f"تم استلام بلاغكم بشأن «{facts.get('title') or 'الملاحظة المسجلة'}» "
             f"في {location}. يرجى تزويدنا بالمعلومات التالية: {', '.join(missing)} "
-            "لاستكمال التحقق والإحالة إلى الجهة المختصة."
+            "لاستكمال التحقق وتحديد مسار المراجعة المناسب."
         )
     else:
         citizen_update = (
             f"تم استلام بلاغكم بشأن «{facts.get('title') or 'الملاحظة المسجلة'}» "
-            f"في {location}، وسيُراجع الموظف البيانات قبل إحالتها إلى الجهة المختصة."
+            f"في {location}، وسيُراجع الموظف البيانات قبل تحديد مسار المراجعة المناسب."
         )
 
     return ActionPlan(
@@ -412,12 +413,26 @@ def _apply_guardrails(
     plan.information_requests = deterministic_missing
     plan.employee_checklist = list(audit.human_checks)
 
-    if any(phrase in audit.risk_assessment for phrase in _UNSAFE_CERTAINTY):
-        audit.risk_assessment = (
-            "لا تتضمن معلومات البلاغ الحالية دليلًا كافيًا لتحديد وجود خطر فوري "
-            "أو نفيه؛ يراجع الموظف خصائص الموقع ونتيجة المعاينة."
+    if re.search(r"\b(?:current_rules_preview|interpretation_rules|stored_triage|case_facts)\b",
+                 audit.classification_rationale):
+        evidence = "، ".join(preview.get("matched_category_keywords") or [])
+        audit.classification_rationale = (
+            f"تشير عبارات البلاغ ({evidence}) إلى المجال المقترح، لكنها ليست دليلًا ميدانيًا. "
+            "يراجع الموظف التصنيف قبل أي إجراء."
+            if evidence else
+            "لا تكفي عبارات البلاغ لتحديد مجال موثوق؛ يراجع الموظف التصنيف."
         )
-        notes.append("Unsupported safety certainty replaced.")
+        notes.append("Internal field names removed from model rationale.")
+
+    verified_risk = (
+        "رصدت القواعد عبارة قد تشير إلى خطر فوري. لا تثبت العبارة وحدها مستوى الخطر "
+        "في الموقع؛ يراجع الموظف التنبيه ويتحقق من الحالة."
+        if context["case_facts"].get("emergency_warning") else
+        "لا تكفي بيانات البلاغ لإثبات وجود خطر فوري أو نفيه؛ يراجع الموظف خصائص الموقع ونتيجة المعاينة."
+    )
+    if audit.risk_assessment != verified_risk:
+        notes.append("Model risk wording replaced with bounded case-fact statement.")
+    audit.risk_assessment = verified_risk
 
     plan_text = plan.model_dump_json()
     if _UNSUPPORTED_TIME_RULE.search(plan_text):
@@ -463,7 +478,7 @@ def build_recommendation_workflow(
     store: BaseStore | None = None,
     knowledge_base: OfficialKnowledgeBase | None = None,
 ):
-    """Build the Track B Functional API workflow with persistence and HITL."""
+    """Build the local Functional API workflow with process-local HITL state."""
     llm = model or _model()
     workflow_checkpointer = checkpointer if checkpointer is not None else InMemorySaver()
     workflow_store = store if store is not None else InMemoryStore()
@@ -502,22 +517,6 @@ def build_recommendation_workflow(
     def recall_memory_task(category: str) -> list[dict[str, Any]]:
         return _memory_values(get_store(), category)
 
-    @task(retry_policy=_TRANSIENT_RETRY)
-    def supervisor_task(payload: dict[str, Any]) -> RoutingDecision:
-        prompt = f"""
-أنت المشرف في BALAGH. اختر عاملًا متخصصًا واحدًا باستخدام RoutingDecision فقط.
-
-{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}
-
-- traffic_safety لبلاغات اللوحات والإشارات والسلامة المرورية.
-- municipal_operations لبقية مرافق البلدية المصنفة.
-- human_classification عندما تكون الفئة غير واضحة أو الثقة منخفضة.
-- needs_human=true إذا احتاجت النتيجة حكم موظف أو تحققًا ميدانيًا؛ لا تنفذ القرار.
-"""
-        return RoutingDecision.model_validate(
-            _invoke_structured(llm, RoutingDecision, prompt)
-        )
-
     def _audit_prompt(payload: dict[str, Any], worker_instruction: str) -> str:
         return f"""
 {worker_instruction}
@@ -532,10 +531,11 @@ def build_recommendation_workflow(
 - لا تخترع حوادث أو سياسات أو SLA.
 - عدم وجود تفاصيل خطر لا يثبت أن الحالة آمنة.
 - استخدم المصادر المسترجعة فقط ولا تنسب إليها نصًا غير موجود.
+- لا تذكر أسماء حقول البيانات أو مفاتيح JSON في النص الذي يراه الموظف.
 """
 
     @task(retry_policy=_TRANSIENT_RETRY)
-    def traffic_safety_worker_task(payload: dict[str, Any]) -> TriageAudit:
+    def traffic_safety_worker_task(payload: dict[str, Any]) -> dict[str, Any]:
         return TriageAudit.model_validate(
             _invoke_structured(
                 llm,
@@ -545,10 +545,10 @@ def build_recommendation_workflow(
                     "أنت عامل تدقيق متخصص في اللوحات والإشارات والسلامة المرورية.",
                 ),
             )
-        )
+        ).model_dump()
 
     @task(retry_policy=_TRANSIENT_RETRY)
-    def municipal_worker_task(payload: dict[str, Any]) -> TriageAudit:
+    def municipal_worker_task(payload: dict[str, Any]) -> dict[str, Any]:
         return TriageAudit.model_validate(
             _invoke_structured(
                 llm,
@@ -558,10 +558,10 @@ def build_recommendation_workflow(
                     "أنت عامل تدقيق متخصص في تشغيل وصيانة المرافق البلدية.",
                 ),
             )
-        )
+        ).model_dump()
 
     @task(retry_policy=_TRANSIENT_RETRY)
-    def human_classification_worker_task(payload: dict[str, Any]) -> TriageAudit:
+    def human_classification_worker_task(payload: dict[str, Any]) -> dict[str, Any]:
         return TriageAudit.model_validate(
             _invoke_structured(
                 llm,
@@ -571,33 +571,20 @@ def build_recommendation_workflow(
                     "أنت عامل فرز للحالات الغامضة؛ صرّح بحدود المعرفة واطلب مراجعة بشرية.",
                 ),
             )
-        )
-
-    @task(retry_policy=_TRANSIENT_RETRY)
-    def coordinator_task(payload: dict[str, Any]) -> ActionPlan:
-        prompt = f"""
-أنت منسق الحالة في BALAGH. أعد ActionPlan فقط من نتيجة العامل والحقائق:
-
-{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}
-
-- اقترح خطوة بشرية أو ميدانية ولا تدّع تنفيذها.
-- لا تحدد حكمًا تنظيميًا دون مرجع رسمي.
-- لا تخترع مدة أو SLA أو حادثًا سابقًا.
-- التشابه تكرار محتمل فقط.
-- اطلب المعلومات التي تؤثر في الموقع أو المعالجة فقط.
-"""
-        return ActionPlan.model_validate(_invoke_structured(llm, ActionPlan, prompt))
+        ).model_dump()
 
     @task
     def guardrail_task(
         context: dict[str, Any],
-        audit: TriageAudit,
-        plan: ActionPlan,
+        audit: dict[str, Any],
+        plan: dict[str, Any],
     ) -> dict[str, Any]:
-        safe_audit, safe_plan, notes = _apply_guardrails(context, audit, plan)
+        safe_audit, safe_plan, notes = _apply_guardrails(
+            context, TriageAudit.model_validate(audit), ActionPlan.model_validate(plan)
+        )
         return {
-            "triage_audit": safe_audit,
-            "action_plan": safe_plan,
+            "triage_audit": safe_audit.model_dump(),
+            "action_plan": safe_plan.model_dump(),
             "validation_notes": notes,
         }
 
@@ -659,9 +646,22 @@ def build_recommendation_workflow(
             "cross_thread_human_memory": memory,
             "previous_thread_state": previous,
         }
-        route = supervisor_task(routing_payload).result()
+        # The model's supervisor and coordinator calls did not improve the
+        # observed smoke flow: one misrouted a clear sign report, and the
+        # other invented an authority and location. Route from the checked
+        # triage result and build the operational draft from stored facts.
+        worker = (
+            "human_classification" if category == "Needs Human Classification"
+            else "traffic_safety" if category == "Traffic Signs & Road Safety"
+            else "municipal_operations"
+        )
+        route = RoutingDecision(
+            worker=worker,
+            needs_human=True,
+            rationale="المسار مستمد من الفرز الحتمي؛ كل توصية تتطلب مراجعة الموظف.",
+        )
 
-        worker_payload = {**routing_payload, "supervisor_route": route.model_dump()}
+        worker_payload = {**routing_payload, "routing_decision": route.model_dump()}
         if route.worker == "traffic_safety":
             audit = traffic_safety_worker_task(worker_payload).result()
         elif route.worker == "human_classification":
@@ -669,22 +669,14 @@ def build_recommendation_workflow(
         else:
             audit = municipal_worker_task(worker_payload).result()
 
-        plan = coordinator_task(
-            {
-                "case": context,
-                "routing": route.model_dump(),
-                "triage_audit": audit.model_dump(),
-                "retrieved_sources": sources,
-                "cross_thread_human_memory": memory,
-            }
-        ).result()
-        guarded = guardrail_task(context, audit, plan).result()
+        plan = _canonical_plan(context)
+        guarded = guardrail_task(context, audit, plan.model_dump()).result()
         draft = {
             "report_id": report_id,
             "thread_id": thread_id,
             "route": route.model_dump(),
-            "triage_audit": guarded["triage_audit"].model_dump(),
-            "action_plan": guarded["action_plan"].model_dump(),
+            "triage_audit": guarded["triage_audit"],
+            "action_plan": guarded["action_plan"],
             "validation_notes": guarded["validation_notes"],
             "official_sources": sources,
             "tool_calls": tool_calls,
@@ -742,12 +734,12 @@ def render_triage_audit(audit: TriageAudit, route: RoutingDecision | None = None
     route_section = ""
     if route is not None:
         route_section = (
-            "0. قرار المشرف\n"
+            "0. مسار المراجعة المستمد من القواعد\n"
             f"- المسار: {route.worker}\n"
             f"- إحالة بشرية: {'نعم' if route.needs_human else 'لا'}\n"
             f"- السبب: {route.rationale}\n\n"
         )
-    return f"""{route_section}1. قرار التصنيف
+    return f"""{route_section}1. مراجعة التصنيف (تحليل النموذج يحتاج تحقق الموظف)
 {decision_labels[audit.classification_decision]}
 - التصنيف المقترح: {audit.proposed_category}
 - الأولوية المقترحة: {audit.proposed_priority}
@@ -811,9 +803,9 @@ def _draft_to_recommendation(
     triage_review = render_triage_audit(audit, route)
     coordinator_review = render_action_plan(plan, sources)
     header = (
-        "توصية الذكاء الاصطناعي — تتطلب اعتماد الموظف"
+        "مراجعة نموذج وخطة قواعد — تتطلب قرار الموظف"
         if language.lower() == "arabic"
-        else "AI RECOMMENDATION — HUMAN APPROVAL REQUIRED"
+        else "MODEL REVIEW AND RULE-BASED PLAN — HUMAN APPROVAL REQUIRED"
     )
     return AgentRecommendation(
         triage_review=triage_review,
@@ -822,6 +814,11 @@ def _draft_to_recommendation(
         validation_notes=" | ".join(draft.get("validation_notes") or []),
         source_citations=" | ".join(
             f"[{source['id']}] {source['url']}" for source in sources
+        ),
+        source_evidence=json.dumps(
+            [{key: source.get(key, "") for key in ("id", "title", "organization", "url", "guidance")}
+             for source in sources],
+            ensure_ascii=False,
         ),
         workflow_thread_id=str(draft["thread_id"]),
         route=route.worker,
@@ -861,9 +858,13 @@ def resume_recommendation(
 ) -> dict[str, Any]:
     """Resume a paused recommendation with the employee's explicit decision."""
     review = HumanReview(decision=decision, reviewer_note=reviewer_note)
-    result = (workflow or _default_workflow()).invoke(
+    active_workflow = workflow or _default_workflow()
+    config = {"configurable": {"thread_id": thread_id}}
+    if not active_workflow.get_state(config).next:
+        raise RuntimeError("Review checkpoint unavailable; discard the stale draft and regenerate it.")
+    result = active_workflow.invoke(
         Command(resume=review.model_dump()),
-        config={"configurable": {"thread_id": thread_id}},
+        config=config,
     )
     if not isinstance(result, dict) or result.get("status") != "completed":
         raise RuntimeError("The recommendation workflow did not complete after review.")

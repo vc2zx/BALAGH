@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+import json
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, TypeVar, cast
+from urllib.parse import urlsplit
 
 from flask import (
     Blueprint,
@@ -73,6 +75,7 @@ DECISION_LABELS = {
     "Approved": "معتمدة",
     "Modified": "معدلة",
     "Rejected": "مرفوضة",
+    "Discarded": "مستبعدة بعد تعذر الاستئناف",
 }
 ACTOR_LABELS = {
     "system": "النظام",
@@ -85,6 +88,7 @@ ACTION_LABELS = {
     "Recommendation generated": "إنشاء توصية",
     "AI recommendation reviewed": "مراجعة التوصية",
     "Triage recalculated": "إعادة الفرز الحتمي",
+    "Recommendation discarded": "استبعاد توصية معلقة",
 }
 
 RIYADH_TIMEZONE = timezone(timedelta(hours=3), name="Asia/Riyadh")
@@ -121,6 +125,32 @@ def _format_datetime(value: object) -> str:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(RIYADH_TIMEZONE).strftime("%Y-%m-%d %H:%M")
+
+
+def _source_links(stored: dict[str, Any] | None) -> list[dict[str, str]]:
+    """Show only the URLs that the local retrieval recorded for this draft."""
+    if not stored:
+        return []
+    links: list[dict[str, str]] = []
+    for citation in str(stored.get("source_citations") or "").split(" | "):
+        match = re.fullmatch(r"\[(S\d+)\] (https://\S+)", citation.strip())
+        if match and urlsplit(match.group(2)).hostname:
+            links.append({"id": match.group(1), "url": match.group(2)})
+    return links
+
+
+def _source_evidence(stored: dict[str, Any] | None) -> list[dict[str, str]]:
+    if not stored:
+        return []
+    try:
+        raw = json.loads(stored.get("source_evidence") or "[]")
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, dict)
+            and urlsplit(str(item.get("url", ""))).scheme == "https"
+            and urlsplit(str(item.get("url", ""))).hostname]
 
 
 def _generate_recommendation(report_id: int):
@@ -238,10 +268,13 @@ def review(report_id: int):
     if report is None:
         abort(404)
 
+    recommendation = database.get_agent_recommendation(report_id)
     return render_template(
         "staff/review.html",
         report=report,
-        recommendation=database.get_agent_recommendation(report_id),
+        recommendation=recommendation,
+        source_links=_source_links(recommendation),
+        source_evidence=_source_evidence(recommendation),
         history=_records(database.get_case_history(report_id)),
         statuses=list(STATUS_LABELS),
     )
@@ -328,13 +361,14 @@ def create_recommendation(report_id: int):
             workflow_name="langgraph-functional-capstone-v2",
             validation_notes=getattr(recommendation, "validation_notes", ""),
             source_citations=getattr(recommendation, "source_citations", ""),
+            source_evidence=getattr(recommendation, "source_evidence", ""),
             workflow_thread_id=getattr(recommendation, "workflow_thread_id", ""),
             agent_route=getattr(recommendation, "route", ""),
             tool_calls=getattr(recommendation, "tool_calls", ""),
         )
     except Exception:  # LangGraph/Ollama expose different runtime exception types.
         current_app.logger.exception("Agent recommendation failed for report %s", report_id)
-        flash("تعذر تشغيل الوكلاء. راجع سجل الخادم للتفاصيل.", "error")
+        flash("تعذر إنشاء توصية الآن. تحقق من تشغيل Ollama والنموذجين المحليين ثم أعد المحاولة؛ يبقى الفرز الأولي متاحًا للمراجعة.", "error")
     else:
         flash(f"تم إنشاء التوصية رقم {recommendation_id} للمراجعة البشرية.", "success")
 
@@ -373,15 +407,33 @@ def review_recommendation(report_id: int, recommendation_id: int):
         )
     except ValueError:
         flash("تعذر تسجيل القرار؛ ربما سبق أن روجعت التوصية.", "error")
+    except RuntimeError as exc:
+        current_app.logger.warning(
+            "Recommendation %s could not resume: %s", recommendation_id, exc
+        )
+        flash("تعذر استئناف المراجعة، ربما بسبب إعادة تشغيل الخادم. لم يُسجل القرار. استبعد المسودة المعلقة ثم أنشئ توصية جديدة، أو أعد المحاولة إذا كان العطل مؤقتًا.", "error")
     except Exception:
         current_app.logger.exception(
             "Recommendation workflow resume failed for recommendation %s",
             recommendation_id,
         )
-        flash("تعذر استئناف سير المراجعة؛ بقيت التوصية معلقة دون تسجيل القرار.", "error")
+        flash("تعذر استئناف المراجعة، ربما بسبب إعادة تشغيل الخادم. لم يُسجل القرار. استبعد المسودة المعلقة ثم أنشئ توصية جديدة، أو أعد المحاولة إذا كان العطل مؤقتًا.", "error")
     else:
         flash("تم تسجيل قرار الموظف في سجل الحالة.", "success")
 
+    return redirect(url_for("staff.review", report_id=report_id))
+
+
+@staff_bp.post("/reports/<int:report_id>/recommendations/<int:recommendation_id>/discard")
+@_staff_required
+def discard_recommendation(report_id: int, recommendation_id: int):
+    stored = database.get_agent_recommendation(report_id)
+    if stored is None or int(stored["id"]) != recommendation_id:
+        abort(404)
+    if database.discard_pending_recommendation(recommendation_id):
+        flash("استُبعدت المسودة المعلقة دون اعتمادها أو تغيير حالة البلاغ. يمكنك إنشاء توصية جديدة.", "success")
+    else:
+        flash("لم تعد هذه التوصية معلقة.", "info")
     return redirect(url_for("staff.review", report_id=report_id))
 
 
