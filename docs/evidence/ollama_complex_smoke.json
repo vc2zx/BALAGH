@@ -1,0 +1,19 @@
+{
+  "model": "qwen3:4b-instruct",
+  "embedding_model": "nomic-embed-text",
+  "synthetic": true,
+  "inference_seconds": 21.317,
+  "review_seconds": 0.012,
+  "route": "human_classification",
+  "tool_calls": "load_case_record | search_similar_cases | retrieve_official_guidance",
+  "source_citations": "[S2] https://shc.rga.gov.sa/content/roadcodes/ar/road-code-library.html | [S1] https://balady.gov.sa/ar/services/تقديم-بلاغ | [S3] https://www.alriyadh.gov.sa/ar/services/3?mainServiceCode=19",
+  "decision": "Rejected",
+  "resume_status": "completed",
+  "history_actions": [
+    "AI recommendation reviewed",
+    "Recommendation generated",
+    "Report created"
+  ],
+  "recommendation": "توصية الذكاء الاصطناعي — تتطلب اعتماد الموظف\n\n1. الإجراء التالي المقترح\nإحالة الحالة إلى الجهة الفنية المختصة في قسم مراقبة المرور، بعد تأكيد التفاصيل المكانية والاتجاهية من المُبلغ.\n\n2. المعلومات المطلوبة من المبلّغ\n- لا توجد.\n\n3. شرط التصعيد\nلا توجد شروط تصعيد محددة في النظام أو في المراجع الرسمية، وبالتالي لا يُطلب تصعيد أو إغلاق تلقائي.\n\n4. تحديث مقترح للمواطن\nيُطلب من المُبلغ تزويدي بتفاصيل محددة حول الموقع المُذكور في البلاغ، بما في ذلك: الاتجاه الدقيق للمخرج، والتقاطع أو النقطة المرجعية المُقربة، ووصف محدد للموقع (مثلاً: مدخل حي تجريبي، أو قبل مبنى معين)، لكي يتم التحقق من مطابقة الموقع مع المخطط المرجعي المعتمد. كما يُطلب تزويدي بتأكيد أن اللوحة المُراد تواجدها مفقودة في الموقع المذكور، أو أن هناك تغييرًا في وصف الحالة. هذه المعلومات ضرورية لتحديد الجهة الفنية المناسبة للإحالة وضمان دقة المعاينة الميدانية.\n\n5. قائمة اعتماد الموظف\n- مطابقة الموقع والوصف مع البيانات التي قدّمها المبلّغ قبل الإحالة.\n- التحقق من المخطط المروري أو المرجع الفني المعتمد قبل تقرير الحاجة إلى اللوحة.\n- توثيق نتيجة التحقق أو المعاينة في سجل الحالة.\n\n6. المصادر الرسمية المسترجعة\n- [S2] الهيئة العامة للطرق — مكتبة كود الطرق السعودي: https://shc.rga.gov.sa/content/roadcodes/ar/road-code-library.html\n- [S1] منصة بلدي — خدمة تقديم بلاغ: https://balady.gov.sa/ar/services/تقديم-بلاغ\n- [S3] أمانة منطقة الرياض — 940 الشكاوى والبلاغات والمقترحات: https://www.alriyadh.gov.sa/ar/services/3?mainServiceCode=19\n\nملاحظة: المصادر مرجعية مساندة، والقرار التنفيذي والتنظيمي يبقى للموظف والجهة المختصة.",
+  "validation_notes": "Required information aligned with deterministic case facts."
+}

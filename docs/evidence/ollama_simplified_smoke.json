@@ -1,0 +1,19 @@
+{
+  "model": "qwen3:4b-instruct",
+  "embedding_model": "nomic-embed-text",
+  "synthetic": true,
+  "inference_seconds": 10.019,
+  "review_seconds": 0.012,
+  "route": "traffic_safety",
+  "tool_calls": "load_case_record | search_similar_cases | retrieve_official_guidance",
+  "source_citations": "[S2] https://shc.rga.gov.sa/content/roadcodes/ar/road-code-library.html | [S1] https://balady.gov.sa/ar/services/تقديم-بلاغ | [S3] https://www.alriyadh.gov.sa/ar/services/3?mainServiceCode=19",
+  "decision": "Rejected",
+  "resume_status": "completed",
+  "history_actions": [
+    "AI recommendation reviewed",
+    "Recommendation generated",
+    "Report created"
+  ],
+  "recommendation": "توصية الذكاء الاصطناعي — تتطلب اعتماد الموظف\n\n1. الإجراء التالي المقترح\nاستكمال بيانات تحديد الموقع في مخرج تجريبي، حي تجريبي، مدينة تجريبية، ثم إحالة البلاغ إلى قسم اللوحات والسلامة المرورية لمطابقة الموقع مع المخطط المروري المعتمد أو المرجع الفني المعتمد وإجراء معاينة ميدانية دون افتراض النتيجة مسبقًا.\n\n2. المعلومات المطلوبة من المبلّغ\n- لا توجد.\n\n3. شرط التصعيد\nيُقترح التصعيد فقط إذا ظهرت معلومات أو معاينة تدل على خطر فوري أو أثر مرتفع، وبعد تقييم الموظف؛ لا توجد مهلة تصعيد معتمدة داخل هذا النموذج الأولي.\n\n4. تحديث مقترح للمواطن\nتم استلام بلاغكم بشأن «لوحة تحديد السرعة مفقودة» في مخرج تجريبي، حي تجريبي، مدينة تجريبية، وسيُراجع الموظف البيانات قبل إحالتها إلى الجهة المختصة.\n\n5. قائمة اعتماد الموظف\n- مطابقة الموقع والوصف مع البيانات التي قدّمها المبلّغ قبل الإحالة.\n- التحقق من المخطط المروري أو المرجع الفني المعتمد قبل تقرير الحاجة إلى اللوحة.\n- توثيق نتيجة التحقق أو المعاينة في سجل الحالة.\n\n6. المصادر الرسمية المسترجعة\n- [S2] الهيئة العامة للطرق — مكتبة كود الطرق السعودي: https://shc.rga.gov.sa/content/roadcodes/ar/road-code-library.html\n- [S1] منصة بلدي — خدمة تقديم بلاغ: https://balady.gov.sa/ar/services/تقديم-بلاغ\n- [S3] أمانة منطقة الرياض — 940 الشكاوى والبلاغات والمقترحات: https://www.alriyadh.gov.sa/ar/services/3?mainServiceCode=19\n\nملاحظة: المصادر مرجعية مساندة، والقرار التنفيذي والتنظيمي يبقى للموظف والجهة المختصة.",
+  "validation_notes": "Required information aligned with deterministic case facts."
+}

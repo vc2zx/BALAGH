@@ -1,185 +1,40 @@
 # BALAGH | بلاغ
 
-منصة محلية مدعومة بالذكاء الاصطناعي لاستقبال بلاغات المرافق العامة وفرزها ومساعدة الموظف على مراجعتها وتحديد الإجراء التالي. النظام استشاري؛ القرار التنفيذي يبقى بيد الموظف.
+BALAGH is a local, Arabic-first public issue reporting and staff triage prototype. A resident submits a report and receives a private tracking code. Rules suggest a category, priority, review queue, missing information, and possible duplicate. A staff member may request a local Ollama model review with retrieved source notes, inspect the draft, and approve, modify, or reject it. Staff update the case status separately. No municipal action is executed by the model.
 
-## سياق المشروع
+بلاغ نموذج محلي لاستقبال بلاغات المرافق العامة ومساعدة الموظف في فرزها. تظهر للمبلّغ نتيجة أولية ورمز متابعة. يقترح النظام التصنيف والأولوية والمعلومات الناقصة والتشابه المحتمل؛ يراجع الموظف التوصية ويتخذ القرار بنفسه.
 
-طُوّر **BALAGH** بوصفه مشروع التخرج العملي (Capstone) ومتطلبًا لإتمام برنامج **بناء أنظمة وكلاء الذكاء الاصطناعي** المقدم ضمن برامج **الهيئة السعودية للبيانات والذكاء الاصطناعي (سدايا | SDAIA)** خلال الفترة **23–27 أغسطس 2026**.
+## Run locally
 
-- GitHub أكاديمية سدايا: [SDAIAAcademy](https://github.com/SDAIAAcademy)
-- المطور: **Suliman Altayar**
-- مسار المشروع: **Track B — Handoffs / Human-in-the-loop**
-- نمط سير العمل: **Routing + Prompt Chaining**
-
-## المشكلة والحل
-
-تصل البلاغات البلدية بصياغات متفاوتة وقد تكون ناقصة أو مكررة أو مصنفة بصورة غير دقيقة. يجمع BALAGH بين:
-
-1. بوابة مواطن لإرسال البلاغ ومتابعته برمز آمن.
-2. فرز حتمي يحفظ التصنيف والأولوية والجهة والمعلومات الناقصة.
-3. سير LangGraph Functional API بمشرف وعاملين متخصصين ومنسق حالة.
-4. أدوات قراءة يختار النموذج استدعاءها للتحقق من الحالة والتشابه والمراجع والذاكرة.
-5. Two-Step RAG محلي يسترجع مقاطع ذات صلة من مصادر رسمية.
-6. حواجز حتمية تمنع إغلاق البلاغ بسبب التشابه وحده أو اختراع موقع أو مهلة خدمة.
-7. توقف `interrupt()` قبل قرار الموظف واستئناف باستخدام `Command(resume=...)`.
-8. Checkpointer قصير المدى وStore مستقل لملاحظات المراجعة عبر Threads مختلفة.
-9. سجل SQLite كامل للحالة والتوصيات والقرارات.
-
-## المعمارية
-
-```text
-بلاغ المواطن
-    ↓
-فرز حتمي + كشف تشابه
-    ↓
-Functional API: @entrypoint + @task
-    ├── تحميل الحالة
-    ├── RAG: load → split → embed → retrieve
-    ├── أدوات قراءة يختارها النموذج
-    ├── مشرف Pydantic يحدد العامل
-    ├── عامل السلامة المرورية / عامل العمليات / عامل التصنيف البشري
-    ├── منسق خطة الإجراء
-    └── حواجز تحقق حتمية
-    ↓
-interrupt() — مراجعة الموظف
-    ↓
-Command(resume=...) — تسجيل القرار والذاكرة
-```
-
-## الوكلاء والتوجيه
-
-- **المشرف:** يعيد `RoutingDecision` منظمًا ويختار `traffic_safety` أو `municipal_operations` أو `human_classification`.
-- **عامل السلامة المرورية:** يراجع اللوحات والإشارات ومخاطر الطريق وحدود المعرفة.
-- **عامل العمليات البلدية:** يراجع بقية فئات المرافق والجهة المختصة.
-- **عامل التصنيف البشري:** يتعامل مع الحالات منخفضة الثقة من دون فرض فئة افتراضية.
-- **منسق الحالة:** يبني `ActionPlan` منظمًا من نتيجة العامل والمصادر المسترجعة.
-- **حواجز التحقق:** تقارن الناتج بالحقائق الحتمية وتستبدل الادعاءات غير المسندة فقط.
-
-## الأدوات المقروءة
-
-النموذج مقيد بأدوات لا تنفذ قرارات ولا تعدل البيانات:
-
-- `load_case_record`
-- `search_similar_cases`
-- `retrieve_official_guidance`
-- `recall_human_review_memory`
-
-تُسجّل أسماء الأدوات المختارة مع التوصية لعرضها في بوابة الموظف.
-
-## RAG
-
-يستخدم المشروع **Two-Step RAG** لأن المراجع الرسمية صغيرة ومستقرة ويجب استرجاعها قبل توليد التحليل. توجد الملاحظات المصدرية في `data/knowledge/`، وتنفذ الطبقة:
-
-1. تحميل ملفات Markdown مع بيانات المصدر.
-2. تقسيمها باستخدام `RecursiveCharacterTextSplitter`.
-3. إنشاء Embeddings محلية بنموذج Ollama `nomic-embed-text`.
-4. تخزين المقاطع في `InMemoryVectorStore`.
-5. استرجاع المقاطع الأقرب دلاليًا قبل استدعاء العامل والمنسق.
-
-المصادر المضمنة:
-
-- [خدمة تقديم بلاغ — منصة بلدي](https://balady.gov.sa/ar/services/تقديم-بلاغ)
-- [مكتبة كود الطرق السعودي — الهيئة العامة للطرق](https://shc.rga.gov.sa/content/roadcodes/ar/road-code-library.html)
-- [940 الشكاوى والبلاغات والمقترحات — أمانة منطقة الرياض](https://www.alriyadh.gov.sa/ar/services/3?mainServiceCode=19)
-
-## الذاكرة والمراجعة البشرية
-
-- `InMemorySaver` يحفظ حالة التنفيذ القصيرة حسب `thread_id` ويتيح استئناف التوصية بعد التوقف.
-- `InMemoryStore` مستقل يحفظ قرار الموظف وملاحظته ضمن Namespace خاص ويجعلها متاحة لتشغيل جديد يحمل Thread مختلفًا.
-- واجهة الموظف تحفظ مسار العامل وThread وحالة الاستئناف والأدوات المختارة في SQLite.
-- لا يسجل قرار الموظف إذا فشل استئناف Workflow.
-
-## الاعتمادية
-
-يطبق المشروع أربع استراتيجيات واضحة:
-
-1. **Transient:** `RetryPolicy` لمحاولتين حول الاسترجاع واستدعاءات النموذج.
-2. **LLM-recoverable:** إذا لم يُعد النموذج Tool Call، تعاد إليه رسالة الخطأ مرة واحدة ليصحح الاستجابة.
-3. **User-fixable:** `interrupt()` ثم `Command(resume=...)` لإكمال المراجعة البشرية.
-4. **Unexpected:** الأخطاء غير المتوقعة تتصاعد إلى طبقة Flask وتُسجل من دون اعتماد قرار جزئي.
-
-## التشغيل
-
-المتطلبات: Python 3.10–3.13، و`uv`، وOllama.
+Requires Python 3.10–3.13, [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.com/). From the repository root:
 
 ```powershell
 ollama pull qwen3:4b-instruct
 ollama pull nomic-embed-text
-uv sync
-Copy-Item .env.example .env
-uv run flask --app app run --debug
+uv sync --locked
+uv run python scripts/setup_local.py
+uv run python scripts/seed_demo.py
+uv run flask --app app run --host 127.0.0.1
 ```
 
-متغيرات `.env`:
+`setup_local.py` creates a private `.env` with random local credentials and prints the staff access code. It refuses to replace an existing `.env`. The seed command adds one clearly synthetic report and is safe to rerun. The site starts at `http://127.0.0.1:5000/citizen/`; staff sign in at `http://127.0.0.1:5000/staff/login`. The server is bound to localhost by default. Set `LANGCHAIN_TRACING_V2=true` and a LangSmith API key only if you intentionally want external tracing; there is no saved live LangSmith trace in this repository.
 
-```env
-MODEL=qwen3:4b-instruct
-OLLAMA_HOST=http://localhost:11434
-EMBEDDING_MODEL=nomic-embed-text
-STAFF_ACCESS_CODE=ضع-رمز-وصول-محلي
-FLASK_SECRET_KEY=ضع-نصا-عشوائيا-طويلا
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=ضع-مفتاح-LangSmith-محلي
-LANGCHAIN_PROJECT=BALAGH-Capstone
-```
+If Ollama is unavailable, citizen submission, rules-based triage, staff status updates, history, and tracking still work. The AI review button shows an error with recovery instructions. Do not describe the rules result as a live model result.
 
-الروابط المحلية:
+## Architecture and boundaries
 
-- بوابة المواطن: `http://127.0.0.1:5000/citizen/`
-- بوابة الموظف: `http://127.0.0.1:5000/staff/login`
+`src/balagh/citizen_routes.py` and `staff_routes.py` are Flask routes; `database.py` stores local SQLite reports, recommendations, and history. `triage.py` applies deterministic Arabic/English keyword and location rules. `agents.py` runs a LangGraph Functional API workflow: read-only tools, retrieval from three local notes (`knowledge.py`), a model audit worker chosen by the rules category, a rules-built action plan, `interrupt()` for staff review, and `Command(resume=...)` for the staff decision. The attached notes link to Balady, the Saudi Road Code library, and Riyadh 940; retrieval does not prove that every generated claim is supported by a source.
 
-## الاستخدام المختصر
+The checkpoint and cross-thread memory are process-local. After a restart, a pending draft cannot be resumed. The app fails without saving the staff decision; staff can explicitly discard that stale draft and generate a new one. The discard is audited and leaves case status unchanged. For a real deployment, use durable workflow storage, individual staff accounts, appropriate access controls, and an agreed data policy before using real reports.
 
-1. **إرسال بلاغ:** افتح بوابة المواطن، أدخل بيانات البلاغ المطلوبة، ثم أرسل البلاغ واحفظ رمز المتابعة الذي يظهر لك.
-2. **الدخول لبوابة الموظف:** افتح بوابة الموظف وسجّل الدخول باستخدام رمز الوصول المحلي المضبوط في `STAFF_ACCESS_CODE`.
-3. **تشغيل المراجعة:** افتح البلاغ المطلوب من بوابة الموظف وشغّل المراجعة؛ ينفذ النظام الاسترجاع والتوجيه والعامل المختار ومنسق الحالة ثم يتوقف عند `interrupt()` بانتظار قرار الموظف.
-4. **اعتماد أو تعديل أو رفض التوصية:** راجع التوصية والمصادر ومسار العامل، ثم اختر اعتمادها كما هي، تعديلها قبل الاعتماد، أو رفضها. يُستأنف الـWorkflow عبر `Command(resume=...)` لتسجيل القرار.
-5. **تحديث حالة البلاغ:** بعد المراجعة يمكن للموظف تحديث حالة البلاغ من بوابة الموظف، وتُحفظ الحالة والقرارات في SQLite لتبقى ظاهرة في سجل البلاغ.
+The current prototype has no government integration, maps, SMS, service-level promise, automatic duplicate closure, or delegated department authority. Category and department labels are prototype suggestions. Demo records are synthetic. Never enter real personal reports into a public demo.
 
-## الاختبارات
+## Verify
 
 ```powershell
-uv run python -m unittest discover -s tests -v
+uv run python -m unittest discover -s tests -q
+uv run python scripts/evaluate_rules.py
+uv run python scripts/smoke_real_ollama.py
 ```
 
-تغطي الاختبارات الفرز، قاعدة البيانات، المصادقة، البوابتين، المخرجات المنظمة، حواجز السلامة، تحميل وتقسيم وتضمين واسترجاع الوثائق، اختيار الأدوات، قرار المشرف، `interrupt` و`Command(resume=...)`، والذاكرة عبر Threadين مختلفين. نماذج الاختبار مضبوطة ولا تتصل بـOllama أو LangSmith.
-
-## التتبع وLangSmith
-
-تم التحقق فعليًا من تحميل إعدادات LangSmith من ملف `.env` بنجاح؛ كان المفتاح محملًا (`loaded=True`) وبطول 51 محرفًا ومن دون مسافات زائدة، ويستخدم المشروع `LANGCHAIN_TRACING_V2=true` و`LANGCHAIN_PROJECT=BALAGH-Capstone`. لا تُحفظ المفاتيح أو روابط الـTraces داخل المستودع.
-
-على مستوى الـWorkflow، يثبت الاختبار `test_functional_workflow_interrupts_resumes_and_shares_memory` أن التنفيذ يتوقف عند `interrupt()` بحالة Pending، ثم يُستأنف باستخدام `Command(resume=...)` على الـThread نفسه، ولا يُكتب قرار الموظف في SQLite إلا بعد عودة التنفيذ بحالة `completed`. كما توثق `docs/DEMO_EVIDENCE.md` تسلسل التشغيل من التوقف إلى الاستئناف وكتابة القرار والذاكرة.
-
-أما **الدليل الحي في LangSmith**، فلا تتضمن نسخة التسليم الحالية Trace ID أو رابطًا أو لقطة محفوظة تثبت تشغيلًا فعليًا واحدًا يجمع `interrupt()` ثم `resume`. لذلك لا يدعي هذا README وجود Trace حي غير موثق. لإكمال دليل محور LangSmith في العرض النهائي يجب تشغيل المراجعة والقرار مع LangSmith متصلًا، ثم إظهار الـTrace الناتج في مشروع `BALAGH-Capstone` بحيث يظهر التوقف ثم الاستئناف ضمن نفس مسار التنفيذ.
-
-## هيكل المشروع
-
-```text
-BALAGH/
-├── app.py
-├── src/balagh/
-│   ├── agents.py
-│   ├── knowledge.py
-│   ├── agent_policy.py
-│   ├── triage.py
-│   ├── database.py
-│   ├── tools.py
-│   ├── citizen_routes.py
-│   └── staff_routes.py
-├── data/knowledge/
-├── templates/
-├── static/css/
-├── docs/
-├── tests/
-├── .env.example
-└── pyproject.toml
-```
-
-
-## التقييم
-
-توجد حالات التقييم والاختبارات المقابلة لها في [مصفوفة التقييم](docs/EVALUATION.md).
-
-## النطاق
-
-BALAGH نموذج Capstone محلي وليس نظامًا حكوميًا إنتاجيًا. المصادقة والتخزين والمرفقات محلية، ولا توجد خرائط أو إشعارات أو تكاملات حكومية تنفيذية. الذكاء الاصطناعي يحلل ويقترح فقط، والموظف يعتمد أو يعدل أو يرفض.
+The unit suite includes mocked model workflows; the smoke script uses the configured local Ollama models on an isolated synthetic SQLite database and performs a staff rejection. It prints timing and the complete output so unsupported details can be inspected. See [SAIF preparation and measured results](docs/SAIF_2026.md) and [evaluation cases](evaluation/arabic_cases.json). No production accuracy or operational impact is established by these small tests.
