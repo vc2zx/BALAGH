@@ -1,0 +1,39 @@
+services:
+  web:
+    build: .
+    env_file: .env
+    environment:
+      BALAGH_DATA_DIR: /var/lib/balagh
+      OLLAMA_HOST: http://ollama:11434
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - balagh-data:/var/lib/balagh
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health/ready',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      BALAGH_DATA_DIR: /var/lib/balagh
+      OLLAMA_HOST: http://ollama:11434
+    command: ["python", "-m", "balagh.worker"]
+    volumes:
+      - balagh-data:/var/lib/balagh
+    restart: unless-stopped
+    depends_on:
+      - ollama
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+volumes:
+  balagh-data:
+  ollama-data:

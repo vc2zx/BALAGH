@@ -2,6 +2,9 @@
 id: S3
 title: 940 الشكاوى والبلاغات والمقترحات
 organization: أمانة منطقة الرياض
+origin_date: unknown
+jurisdiction: riyadh
+topic: report_lifecycle
 url: https://www.alriyadh.gov.sa/ar/services/3?mainServiceCode=19
 ---
 

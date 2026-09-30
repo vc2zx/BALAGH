@@ -1,254 +1,177 @@
 from __future__ import annotations
 
-import os
+import sqlite3
 import tempfile
 import unittest
-from importlib.util import find_spec
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
-import balagh.database as database
-from balagh import create_app
+from balagh import create_app, database, store
+from balagh.auth import create_user
+from balagh.semantic import validate_proposal
 from balagh.staff_routes import _format_datetime
-from balagh.triage import ReportInput, triage_report
 
 
-@unittest.skipUnless(find_spec("flask"), "Flask is not installed in this test environment")
 class StaffRouteTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.temp_path = Path(self.temp_dir.name)
-        self.data_patch = patch.object(database, "DATA_DIR", self.temp_path)
-        self.db_patch = patch.object(database, "DB_PATH", self.temp_path / "test.db")
-        self.env_patch = patch.dict(os.environ, {"STAFF_ACCESS_CODE": "202608"})
-        self.data_patch.start()
-        self.db_patch.start()
-        self.env_patch.start()
-
-        self.app = create_app({"TESTING": True, "SECRET_KEY": "test-secret"})
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = Path(self.temp.name)
+        self.data_patch = patch.object(database, "DATA_DIR", self.path)
+        self.db_patch = patch.object(database, "DB_PATH", self.path / "test.db")
+        self.data_patch.start(); self.db_patch.start()
+        self.app = create_app({"TESTING": True, "SECRET_KEY": "test-secret", "RATE_LIMIT_ENABLED": False})
         self.client = self.app.test_client()
-        self.report_id = self._create_report(
-            "حفرة في الطريق",
-            "حفرة كبيرة منذ يومين أمام المنزل رقم 12 وتعيق السيارات",
-            "الرياض",
-            "الروابي",
-        )
+        self.admin_id = create_user("admin", "a-long-private-passphrase", "admin", [])
+        self.reviewer_id = create_user("jeddah_reviewer", "another-private-passphrase", "reviewer", ["jeddah"])
+        self.client.get("/citizen/")
+        with self.client.session_transaction() as user_session:
+            nonce = user_session["submission_nonce"]
+        self.client.post("/citizen/", data={"submission_nonce": nonce, "title": "حفرة في الطريق",
+            "description": "الشارع بعد الأمطار أصبح مليان حفريات", "city": "الرياض", "district": "الروابي"})
+        with self.client.session_transaction() as user_session:
+            self.tracking_code = user_session["last_submission"]["tracking_code"]
+        self.report_id = 1
 
     def tearDown(self) -> None:
-        self.env_patch.stop()
-        self.db_patch.stop()
-        self.data_patch.stop()
-        self.temp_dir.cleanup()
+        self.db_patch.stop(); self.data_patch.stop(); self.temp.cleanup()
 
-    def _create_report(self, title: str, description: str, city: str, district: str) -> int:
-        report = ReportInput(
-            title=title,
-            description=description,
-            city=city,
-            district=district,
-        )
-        result = triage_report(report, database.get_open_reports(), "Arabic")
-        return database.create_report(report, result, "Arabic")
+    def _login(self, username: str = "admin", password: str = "a-long-private-passphrase") -> None:
+        result = self.client.post("/staff/login", data={"username": username, "password": password})
+        self.assertEqual(result.status_code, 302)
 
-    def _login(self, code: str = "202608", follow_redirects: bool = False):
-        return self.client.post(
-            "/staff/login",
-            data={"access_code": code},
-            follow_redirects=follow_redirects,
-        )
+    def _proposal(self) -> int:
+        worker = "test-worker"
+        self.assertEqual(store.claim_job(worker), self.report_id)
+        raw = {"category_ids": ["waste_cleanliness"],
+               "proposed_priority": "Medium", "rationale": "مقترح أولي يحتاج مراجعة الموظف",
+               "evidence_spans": ["حفرة في الطريق"], "uncertainty_reason": "",
+               "missing_information": [], "risk_signals": ["none"]}
+        proposal = validate_proposal(raw, "حفرة في الطريق\nالشارع بعد الأمطار أصبح مليان حفريات", "riyadh")
+        return store.complete_job(self.report_id, worker, proposal, "mock-model")
 
-    def test_utc_timestamp_is_displayed_in_riyadh_time(self) -> None:
-        self.assertEqual(
-            _format_datetime("2026-08-27T06:16:00+00:00"),
-            "2026-08-27 09:16",
-        )
-
-    def test_staff_pages_require_login(self) -> None:
-        response = self.client.get("/staff/")
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/staff/login", response.headers["Location"])
-
-    def test_wrong_access_code_is_rejected(self) -> None:
-        response = self._login("wrong", follow_redirects=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("رمز الوصول غير صحيح".encode(), response.data)
-
-    def test_staff_can_login_and_view_dashboard(self) -> None:
-        response = self._login(follow_redirects=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("لوحة التحكم".encode(), response.data)
-        self.assertIn("حفرة في الطريق".encode(), response.data)
-
-    def test_report_search_filters_results(self) -> None:
-        self._create_report(
-            "عمود إنارة متوقف",
-            "ثلاثة أعمدة إنارة متوقفة منذ ثلاثة أيام بجوار المدرسة",
-            "جدة",
-            "الصفا",
-        )
-        self._login()
-
-        response = self.client.get("/staff/reports?q=حفرة")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("حفرة في الطريق".encode(), response.data)
-        self.assertNotIn("عمود إنارة متوقف".encode(), response.data)
-
-        by_number = self.client.get(f"/staff/reports?q=BLG-{self.report_id:05d}")
-        self.assertEqual(by_number.status_code, 200)
-        self.assertIn("حفرة في الطريق".encode(), by_number.data)
-
-    def test_staff_can_update_status_and_history(self) -> None:
-        self._login()
-        response = self.client.post(
-            f"/staff/reports/{self.report_id}/status",
-            data={"status": "In Progress"},
-            follow_redirects=True,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("تم تحديث الحالة".encode(), response.data)
-        self.assertEqual(database.get_report(self.report_id)["status"], "In Progress")
-        actions = set(database.get_case_history(self.report_id)["action"].tolist())
-        self.assertIn("Status changed", actions)
-
-    def test_staff_can_retriage_a_stale_speed_sign_report(self) -> None:
-        report_id = self._create_report(
-            "there's no speed limit sign",
-            "the speed limit in this road is unknown",
-            "riyadh",
-            "al malaz",
-        )
-        with database._connection() as connection:
-            connection.execute(
-                """
-                UPDATE reports
-                SET category = 'General Community Services',
-                    priority = 'Low',
-                    department = 'General Service Coordination'
-                WHERE id = ?
-                """,
-                (report_id,),
-            )
-            connection.commit()
-
-        self._login()
-        response = self.client.post(
-            f"/staff/reports/{report_id}/retriage",
-            follow_redirects=True,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("أُعيد فرز البلاغ".encode(), response.data)
-        stored = database.get_report(report_id)
-        self.assertEqual(stored["category"], "Traffic Signs & Road Safety")
-        self.assertEqual(stored["priority"], "Medium")
-        self.assertEqual(stored["department"], "Traffic Signs and Road Safety")
-        actions = set(database.get_case_history(report_id)["action"].tolist())
-        self.assertIn("Triage recalculated", actions)
-
-    def test_agent_recommendation_can_be_generated_and_reviewed(self) -> None:
-        self._login()
-        fake = SimpleNamespace(
-            triage_review="مراجعة الفرز",
-            coordinator_review="مراجعة التنسيق",
-            final_recommendation="التوصية النهائية",
-        )
-
-        with patch("balagh.staff_routes._generate_recommendation", return_value=fake):
-            response = self.client.post(
-                f"/staff/reports/{self.report_id}/recommendations",
-                follow_redirects=True,
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("تم إنشاء التوصية".encode(), response.data)
-        self.assertIn("راجع التوصية المعلقة".encode(), response.data)
-        recommendation_action = (
-            f'action="/staff/reports/{self.report_id}/recommendations"'.encode()
-        )
-        self.assertNotIn(recommendation_action, response.data)
-        stored = database.get_agent_recommendation(self.report_id)
-        self.assertEqual(stored["decision"], "Pending")
-
-        response = self.client.post(
-            f"/staff/reports/{self.report_id}/recommendations/{stored['id']}/review",
-            data={"decision": "Modified", "reviewer_note": "تحقق ميداني أولًا."},
-            follow_redirects=True,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("تم تسجيل قرار الموظف".encode(), response.data)
-        self.assertIn(recommendation_action, response.data)
-        self.assertEqual(
-            database.get_agent_recommendation(self.report_id)["decision"],
-            "Modified",
-        )
-
-    def test_modified_recommendation_requires_note_in_staff_portal(self) -> None:
-        self._login()
-        recommendation_id = database.save_agent_recommendation(
-            self.report_id,
-            "مراجعة الفرز",
-            "مراجعة التنسيق",
-            "التوصية النهائية",
-        )
-
-        response = self.client.post(
-            f"/staff/reports/{self.report_id}/recommendations/{recommendation_id}/review",
-            data={"decision": "Modified", "reviewer_note": ""},
-            follow_redirects=True,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("اكتب ملاحظة".encode(), response.data)
-        self.assertEqual(
-            database.get_agent_recommendation(self.report_id)["decision"],
-            "Pending",
-        )
-
-    def test_failed_langgraph_resume_keeps_recommendation_pending(self) -> None:
-        self._login()
-        recommendation_id = database.save_agent_recommendation(
-            self.report_id,
-            "مراجعة الفرز",
-            "مراجعة التنسيق",
-            "التوصية النهائية",
-            workflow_thread_id="thread-resume-test",
-            agent_route="municipal_operations",
-        )
-
-        with patch(
-            "balagh.staff_routes._resume_recommendation",
-            side_effect=RuntimeError("checkpoint unavailable"),
-        ):
-            response = self.client.post(
-                f"/staff/reports/{self.report_id}/recommendations/{recommendation_id}/review",
-                data={"decision": "Approved", "reviewer_note": ""},
-                follow_redirects=True,
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("تعذر استئناف المراجعة".encode(), response.data)
-        self.assertEqual(
-            database.get_agent_recommendation(self.report_id)["decision"],
-            "Pending",
-        )
-
-        discarded = self.client.post(
-            f"/staff/reports/{self.report_id}/recommendations/{recommendation_id}/discard",
-            follow_redirects=True,
-        )
-        self.assertEqual(discarded.status_code, 200)
-        self.assertEqual(database.get_agent_recommendation(self.report_id)["decision"], "Discarded")
-        self.assertEqual(database.get_report(self.report_id)["status"], "Open")
-        self.assertIn("Recommendation discarded", database.get_case_history(self.report_id)["action"].tolist())
-        self.assertIn(f'action="/staff/reports/{self.report_id}/recommendations"'.encode(), discarded.data)
-
-    def test_logout_clears_staff_session(self) -> None:
-        self._login()
-        response = self.client.post("/staff/logout")
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/staff/login"))
+    def test_time_display_and_staff_authentication(self) -> None:
+        self.assertEqual(_format_datetime("2026-08-27T06:16:00+00:00"), "2026-08-27 09:16")
         self.assertEqual(self.client.get("/staff/").status_code, 302)
+        self._login()
+        self.assertEqual(self.client.get("/staff/").status_code, 200)
+        self.assertEqual(self.client.get("/staff/reports").status_code, 200)
+
+    def test_jurisdiction_blocks_other_city(self) -> None:
+        self._login("jeddah_reviewer", "another-private-passphrase")
+        self.assertEqual(self.client.get(f"/staff/reports/{self.report_id}").status_code, 403)
+        self.assertNotIn("حفرة في الطريق".encode(), self.client.get("/staff/reports").data)
+
+    def test_staff_prefix_search_uses_bounded_indexed_page(self) -> None:
+        found = store.search_reports({"q": "حفرة"}, None, page_size=1)
+        self.assertEqual([row["id"] for row in found], [self.report_id])
+        self.assertEqual(store.search_reports({"q": "الطريق"}, None), [])
+        with database._connection() as connection:
+            plan = " ".join(row[3] for row in connection.execute(
+                "EXPLAIN QUERY PLAN SELECT id FROM reports WHERE "
+                "((title>=? AND title<?) OR (city>=? AND city<?) OR (district>=? AND district<?)) "
+                "ORDER BY id DESC LIMIT 26", ("حفرة", "حفرة\uffff") * 3))
+        self.assertIn("MULTI-INDEX OR", plan)
+
+    def test_semantic_proposal_and_human_correction_are_separate(self) -> None:
+        proposal_id = self._proposal()
+        self._login()
+        page = self.client.get(f"/staff/reports/{self.report_id}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("حفرة في الطريق".encode(), page.data)
+        response = self.client.post(f"/staff/reports/{self.report_id}/decision", data={
+            "version": "0", "decision": "Corrected", "category_ids": "roads_sidewalks",
+            "priority": "High", "review_queue": "roads_review", "risk_review": "unreviewed",
+            "duplicate_decision": "unreviewed", "reason": "الوصف يشير إلى تلف الطريق."},
+            follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        case = store.case_view(self.report_id)
+        self.assertEqual(case["proposal"]["id"], proposal_id)
+        self.assertEqual(case["proposal"]["status"], "Corrected")
+        self.assertEqual(case["decision"]["category_ids"], ["roads_sidewalks"])
+        self.assertEqual(case["decision"]["reviewer_name"], "admin")
+        self.assertEqual(case["report"]["description"], "الشارع بعد الأمطار أصبح مليان حفريات")
+        self.assertEqual(case["report"]["category"], "Needs Human Classification")
+        tracked = self.client.post("/citizen/track", data={"tracking_code": self.tracking_code})
+        self.assertIn("التصنيف بعد مراجعة الموظف".encode(), tracked.data)
+        self.assertIn("الطرق والأرصفة".encode(), tracked.data)
+
+    def test_repeated_review_and_stale_version_do_not_overwrite(self) -> None:
+        self._proposal(); self._login()
+        data = {"version": "0", "decision": "Approved", "category_ids": "waste_cleanliness",
+                "priority": "Medium", "review_queue": "cleanliness_review", "risk_review": "unreviewed",
+                "duplicate_decision": "unreviewed", "reason": ""}
+        self.client.post(f"/staff/reports/{self.report_id}/decision", data=data)
+        self.client.post(f"/staff/reports/{self.report_id}/decision", data=data)
+        with database._connection() as connection:
+            count = connection.execute("SELECT COUNT(*) FROM staff_decisions WHERE report_id=?",
+                                       (self.report_id,)).fetchone()[0]
+        self.assertEqual(count, 1)
+        self.assertEqual(store.case_view(self.report_id)["report"]["version"], 1)
+
+    def test_manual_failure_queue_cannot_be_approved_or_reviewed_twice(self) -> None:
+        with database._connection() as connection:
+            connection.execute("UPDATE reports SET analysis_state='needs_human' WHERE id=?", (self.report_id,))
+            connection.commit()
+        with self.assertRaises(ValueError):
+            store.review(self.report_id, None, self.admin_id, 0, "Approved",
+                         ["roads_sidewalks"], "Medium", "roads_review", "unreviewed",
+                         "unreviewed", None, "")
+        store.review(self.report_id, None, self.admin_id, 0, "Corrected",
+                     ["roads_sidewalks"], "Medium", "roads_review", "unreviewed",
+                     "unreviewed", None, "Manual classification after model failure")
+        with self.assertRaises(ValueError):
+            store.review(self.report_id, None, self.admin_id, 1, "Corrected",
+                         ["waste_cleanliness"], "Medium", "cleanliness_review", "unreviewed",
+                         "unreviewed", None, "Another classification")
+
+    def test_pending_proposal_survives_app_restart(self) -> None:
+        self._proposal()
+        restarted = create_app({"TESTING": True, "SECRET_KEY": "another-test-key", "RATE_LIMIT_ENABLED": False})
+        client = restarted.test_client()
+        client.post("/staff/login", data={"username": "admin", "password": "a-long-private-passphrase"})
+        self.assertIn("مقترح أولي".encode(), client.get(f"/staff/reports/{self.report_id}").data)
+
+    def test_failed_persistence_rolls_back_review_for_retry(self) -> None:
+        proposal_id = self._proposal()
+        with database._connection() as connection:
+            connection.execute("""CREATE TRIGGER fail_decision BEFORE INSERT ON staff_decisions
+                BEGIN SELECT RAISE(ABORT, 'simulated persistence failure'); END""")
+            connection.commit()
+        with self.assertRaises(sqlite3.DatabaseError):
+            store.review(self.report_id, proposal_id, self.admin_id, 0, "Approved",
+                         ["waste_cleanliness"], "Medium", "cleanliness_review", "unreviewed",
+                         "unreviewed", None, "")
+        self.assertEqual(store.case_view(self.report_id)["proposal"]["status"], "Pending")
+        self.assertEqual(store.case_view(self.report_id)["report"]["version"], 0)
+        with database._connection() as connection:
+            connection.execute("DROP TRIGGER fail_decision"); connection.commit()
+        store.review(self.report_id, proposal_id, self.admin_id, 0, "Approved",
+                     ["waste_cleanliness"], "Medium", "cleanliness_review", "unreviewed",
+                     "unreviewed", None, "")
+        self.assertEqual(store.case_view(self.report_id)["proposal"]["status"], "Approved")
+
+    def test_two_reviewers_cannot_both_save(self) -> None:
+        proposal_id = self._proposal()
+        def decide(_: int) -> str:
+            try:
+                store.review(self.report_id, proposal_id, self.admin_id, 0, "Approved",
+                             ["waste_cleanliness"], "Medium", "cleanliness_review", "unreviewed",
+                             "unreviewed", None, "")
+                return "saved"
+            except ValueError:
+                return "stale"
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            outcomes = list(executor.map(decide, range(2)))
+        self.assertCountEqual(outcomes, ["saved", "stale"])
+
+    def test_status_transitions_need_reason(self) -> None:
+        with self.assertRaises(ValueError):
+            store.change_status(self.report_id, self.admin_id, 0, "Closed", "skip")
+        with self.assertRaises(ValueError):
+            store.change_status(self.report_id, self.admin_id, 0, "In Progress", "")
+        store.change_status(self.report_id, self.admin_id, 0, "In Progress", "بدأت مراجعة الموظف")
+        self.assertEqual(store.case_view(self.report_id)["report"]["status"], "In Progress")
 
 
 if __name__ == "__main__":

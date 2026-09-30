@@ -1,69 +1,18 @@
 {% extends "staff/base.html" %}
-
 {% block title %}البلاغات | بلاغ{% endblock %}
-
 {% block content %}
-<section class="staff-page-heading">
-    <div>
-        <p class="eyebrow">إدارة الحالات</p>
-        <h1>البلاغات</h1>
-        <p>ابحث وصفِّ البلاغات ثم افتح الحالة لمراجعتها.</p>
-    </div>
-</section>
-
+<section class="staff-page-heading"><div><p class="eyebrow">إدارة الحالات</p><h1>البلاغات</h1>
+<p>تظهر هنا البلاغات ضمن صلاحية مدينتك. التحليل الآلي ينتظر قرار الموظف.</p></div></section>
 <form class="filter-panel" method="get">
-    <div class="field filter-search">
-        <label for="q">بحث</label>
-        <input id="q" name="q" value="{{ filters.q }}" placeholder="العنوان أو المدينة أو الحي أو رقم البلاغ">
-    </div>
-    <div class="field">
-        <label for="category">التصنيف</label>
-        <select id="category" name="category">
-            <option value="">الكل</option>
-            {% for value in choices.categories %}<option value="{{ value }}" {{ 'selected' if filters.category == value else '' }}>{{ category_label(value) }}</option>{% endfor %}
-        </select>
-    </div>
-    <div class="field">
-        <label for="priority">الأولوية</label>
-        <select id="priority" name="priority">
-            <option value="">الكل</option>
-            {% for value in choices.priorities %}<option value="{{ value }}" {{ 'selected' if filters.priority == value else '' }}>{{ priority_label(value) }}</option>{% endfor %}
-        </select>
-    </div>
-    <div class="field">
-        <label for="status">الحالة</label>
-        <select id="status" name="status">
-            <option value="">الكل</option>
-            {% for value in choices.statuses %}<option value="{{ value }}" {{ 'selected' if filters.status == value else '' }}>{{ status_label(value) }}</option>{% endfor %}
-        </select>
-    </div>
-    <button class="primary-button" type="submit">تطبيق</button>
-    <a class="secondary-button" href="{{ url_for('staff.reports') }}">مسح</a>
+  <div class="field filter-search"><label for="q">بحث ببداية النص</label><input id="q" name="q" value="{{ filters.q }}" placeholder="بداية العنوان أو المدينة أو الحي، أو رقم البلاغ"></div>
+  <div class="field"><label for="status">الحالة</label><select id="status" name="status"><option value="">الكل</option>{% for value,label in statuses.items() %}<option value="{{ value }}" {{ 'selected' if filters.status == value else '' }}>{{ label }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="analysis_state">مرحلة التحليل</label><select id="analysis_state" name="analysis_state"><option value="">الكل</option>{% for value,label in stages.items() %}<option value="{{ value }}" {{ 'selected' if filters.analysis_state == value else '' }}>{{ label }}</option>{% endfor %}</select></div>
+  <button class="primary-button" type="submit">تطبيق</button>
 </form>
-
-<section class="staff-panel">
-    <div class="panel-heading"><h2>النتائج</h2><span>{{ reports|length }} بلاغ</span></div>
-    {% if reports %}
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>رقم البلاغ</th><th>العنوان</th><th>الموقع</th><th>التصنيف</th><th>الأولوية</th><th>الحالة</th><th></th></tr></thead>
-            <tbody>
-                {% for report in reports %}
-                <tr>
-                    <td class="case-id">BLG-{{ "%05d"|format(report.id) }}</td>
-                    <td>{{ report.title }}</td>
-                    <td>{{ report.city }}، {{ report.district }}</td>
-                    <td>{{ category_label(report.category) }}</td>
-                    <td><span class="pill priority-{{ report.priority|lower }}">{{ priority_label(report.priority) }}</span></td>
-                    <td><span class="pill status-{{ report.status|lower|replace(' ', '-') }}">{{ status_label(report.status) }}</span></td>
-                    <td><a class="table-link" href="{{ url_for('staff.review', report_id=report.id) }}">مراجعة</a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="empty-state">لا توجد بلاغات مطابقة للفلاتر الحالية.</div>
-    {% endif %}
+<section class="staff-panel"><div class="panel-heading"><h2>النتائج</h2><span>{{ reports|length }} في هذه الصفحة</span></div>
+{% if reports %}<div class="table-wrap"><table><thead><tr><th>رقم البلاغ</th><th>العنوان</th><th>الموقع</th><th>مرحلة التحليل</th><th>الحالة</th><th></th></tr></thead><tbody>
+{% for report in reports %}<tr><td class="case-id">BLG-{{ "%05d"|format(report.id) }}</td><td>{{ report.title }}</td><td>{{ report.city }}، {{ report.district }}</td><td>{{ stage_label(report.analysis_state) }}</td><td>{{ status_label(report.status) }}</td><td><a class="table-link" href="{{ url_for('staff.review', report_id=report.id) }}">فتح</a></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<div class="empty-state">لا توجد بلاغات مطابقة.</div>{% endif %}
+<div class="actions">{% if page > 1 %}<a class="secondary-button" href="{{ url_for('staff.reports', page=page-1, q=filters.q, status=filters.status, analysis_state=filters.analysis_state) }}">الصفحة السابقة</a>{% endif %}{% if has_next %}<a class="secondary-button" href="{{ url_for('staff.reports', page=page+1, q=filters.q, status=filters.status, analysis_state=filters.analysis_state) }}">الصفحة التالية</a>{% endif %}</div>
 </section>
 {% endblock %}

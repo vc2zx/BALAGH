@@ -1,0 +1,9 @@
+.git
+.venv
+.uv-cache
+.env
+__pycache__
+*.pyc
+data/balagh.db*
+data/uploads/*
+work/

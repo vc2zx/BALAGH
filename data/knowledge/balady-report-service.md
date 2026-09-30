@@ -2,6 +2,9 @@
 id: S1
 title: خدمة تقديم بلاغ
 organization: منصة بلدي
+origin_date: unknown
+jurisdiction: saudi_arabia
+topic: report_submission
 url: https://balady.gov.sa/ar/services/تقديم-بلاغ
 ---
 

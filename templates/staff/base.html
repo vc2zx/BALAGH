@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="staff-body">
-    {% if session.get('staff_authenticated') %}
+    {% if session.get('staff_user_id') %}
     <header class="staff-header">
         <a class="brand" href="{{ url_for('staff.dashboard') }}" aria-label="العودة إلى لوحة الموظف">
             <span class="brand-mark" aria-hidden="true">ب</span>
@@ -27,7 +27,7 @@
     </header>
     {% endif %}
 
-    <main class="{{ 'staff-shell' if session.get('staff_authenticated') else 'login-shell' }}">
+    <main class="{{ 'staff-shell' if session.get('staff_user_id') else 'login-shell' }}">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
             <div class="alert {{ category }}" role="status">{{ message }}</div>

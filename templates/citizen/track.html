@@ -12,7 +12,7 @@
 <form class="tracking-form" method="post">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
     <label for="tracking_code">رمز المتابعة</label>
-    <input id="tracking_code" name="tracking_code" value="{{ tracking_code }}" autocomplete="off" placeholder="مثال: A1B2C3D4E5" required>
+    <input id="tracking_code" name="tracking_code" value="{{ tracking_code }}" autocomplete="off" placeholder="رمز المتابعة الخاص بك" required>
     <button class="primary-button" type="submit">عرض الحالة</button>
 </form>
 
@@ -28,12 +28,17 @@
         <span class="status">{{ status_ar(report.status) }}</span>
     </div>
     <dl>
-        <div><dt>تصنيف مقترح</dt><dd>{{ category_ar(report.category) }}</dd></div>
-        <div><dt>أولوية مقترحة</dt><dd>{{ priority_ar(report.priority) }}</dd></div>
+        <div><dt>مرحلة المراجعة</dt><dd>
+            {% if decision %}راجعه موظف{% elif report.analysis_state == 'proposed' %}تحليل أولي بانتظار مراجعة الموظف{% elif report.analysis_state == 'needs_human' %}تحتاج الحالة مراجعة بشرية مباشرة{% else %}تم الاستلام، والتحليل قيد الإعداد{% endif %}
+        </dd></div>
+        {% if decision and decision.decision != 'Rejected' %}
+        <div><dt>التصنيف بعد مراجعة الموظف</dt><dd>{% for category in decision.category_ids %}{{ category_ar(category) }}{{ '، ' if not loop.last else '' }}{% endfor %}</dd></div>
+        <div><dt>الأولوية بعد مراجعة الموظف</dt><dd>{{ priority_ar(decision.priority) }}</dd></div>
+        {% elif decision %}<div><dt>نتيجة المراجعة</dt><dd>لم يُعتمد التصنيف المقترح؛ الحالة بحاجة متابعة بشرية.</dd></div>{% endif %}
         <div><dt>المدينة</dt><dd>{{ report.city }}</dd></div>
         <div><dt>الحي</dt><dd>{{ report.district }}</dd></div>
     </dl>
-    <p>الحالة أعلاه يحدّثها الموظف. التصنيف والأولوية اقتراح أولي وليسا قرار إحالة معتمدًا.</p>
+    <p>الحالة التشغيلية يحدّثها الموظف. لا يعني ظهور التحليل الأولي اتخاذ قرار أو إرسال البلاغ لجهة حكومية.</p>
 </section>
 {% endif %}
 {% endblock %}

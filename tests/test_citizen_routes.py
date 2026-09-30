@@ -24,6 +24,9 @@ class CitizenRouteTests(unittest.TestCase):
 
         self.app = create_app({"TESTING": True, "SECRET_KEY": "test-secret"})
         self.client = self.app.test_client()
+        self.client.get("/citizen/")
+        with self.client.session_transaction() as user_session:
+            self.nonce = user_session["submission_nonce"]
 
     def tearDown(self) -> None:
         self.db_patch.stop()
@@ -45,6 +48,7 @@ class CitizenRouteTests(unittest.TestCase):
         response = self.client.post(
             "/citizen/",
             data={
+                "submission_nonce": self.nonce,
                 "title": "حفرة في الشارع",
                 "description": "حفرة كبيرة منذ يومين تسبب انحراف السيارات وعددها 1",
                 "city": "الرياض",
@@ -66,6 +70,31 @@ class CitizenRouteTests(unittest.TestCase):
         self.assertEqual(tracked.status_code, 200)
         self.assertIn("حفرة في الشارع".encode(), tracked.data)
         self.assertIn("مفتوح".encode(), tracked.data)
+        self.assertNotIn("التصنيف بعد مراجعة الموظف".encode(), tracked.data)
+
+    def test_repeated_submission_uses_one_report_and_tracking_code(self) -> None:
+        payload = {"submission_nonce": self.nonce, "title": "رصيف تالف",
+                   "description": "الرصيف متكسر قرب المنزل", "city": "الرياض", "district": "الروابي"}
+        self.assertEqual(self.client.post("/citizen/", data=payload).status_code, 302)
+        with self.client.session_transaction() as user_session:
+            first_code = user_session["last_submission"]["tracking_code"]
+        self.assertEqual(self.client.post("/citizen/", data=payload).status_code, 302)
+        with self.client.session_transaction() as user_session:
+            self.assertEqual(user_session["last_submission"]["tracking_code"], first_code)
+        self.assertEqual(len(database.get_reports()), 1)
+
+    def test_failed_report_creation_removes_uploaded_file(self) -> None:
+        content = BytesIO()
+        Image.new("RGB", (8, 8), "red").save(content, format="PNG")
+        content.seek(0)
+        with patch("balagh.citizen_routes.store.submit_report", side_effect=RuntimeError("database unavailable")):
+            response = self.client.post("/citizen/", data={
+                "submission_nonce": self.nonce, "title": "حفرة", "description": "حفرة في الشارع",
+                "city": "الرياض", "district": "الروابي",
+                "attachment": (content, "photo.png", "image/png"),
+            }, content_type="multipart/form-data")
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(list((self.temp_path / "uploads").glob("*.png")))
 
     def test_numeric_report_id_is_not_a_tracking_code(self) -> None:
         response = self.client.post(
@@ -77,6 +106,7 @@ class CitizenRouteTests(unittest.TestCase):
 
     def test_fake_image_content_is_rejected(self) -> None:
         response = self.client.post("/citizen/", data={
+            "submission_nonce": self.nonce,
             "title": "حفرة في الطريق", "description": "حفرة كبيرة في الطريق قرب الحديقة",
             "city": "الرياض", "district": "الروابي",
             "attachment": (BytesIO(b"not a PNG"), "photo.png", "image/png"),
@@ -91,6 +121,7 @@ class CitizenRouteTests(unittest.TestCase):
         Image.new("RGB", (8, 8), "red").save(content, format="PNG", pnginfo=metadata)
         content.seek(0)
         response = self.client.post("/citizen/", data={
+            "submission_nonce": self.nonce,
             "title": "حفرة في الطريق", "description": "حفرة كبيرة في الطريق قرب الحديقة",
             "city": "الرياض", "district": "الروابي",
             "attachment": (content, "photo.png", "image/png"),

@@ -1,7 +1,7 @@
 [project]
 name = "balagh-community-triage"
-version = "2.0.2"
-description = "A local human-in-the-loop community issue triage and agentic case coordination system."
+version = "3.0.0"
+description = "A local context-aware civic triage prototype with durable human review."
 authors = [{ name = "Suliman Altayar" }]
 requires-python = ">=3.10,<3.14"
 dependencies = [
@@ -13,6 +13,8 @@ dependencies = [
     "pandas>=2.2.0",
     "pillow>=11.0.0,<13.0.0",
     "python-dotenv>=1.0.1",
+    "cryptography>=44.0.0,<48.0.0",
+    "gunicorn>=23.0.0,<25.0.0",
 ]
 
 [build-system]
