@@ -1,40 +1,44 @@
 # BALAGH | بلاغ
 
-BALAGH is a local, Arabic-first public issue reporting and staff triage prototype. A resident submits a report and receives a private tracking code. Rules suggest a category, priority, review queue, missing information, and possible duplicate. A staff member may request a local Ollama model review with retrieved source notes, inspect the draft, and approve, modify, or reject it. Staff update the case status separately. No municipal action is executed by the model.
+BALAGH is an Arabic-first **local research prototype** for civic report intake and staff review. A resident receives a private tracking code immediately. A separate worker asks a local model for one structured semantic proposal, runs independent safety checks, ranks possible duplicates, and retrieves limited source context. A named staff member approves, corrects, or rejects the proposal and separately changes the operational case status. The model never executes a municipal action. No government integration is enabled.
 
-بلاغ نموذج محلي لاستقبال بلاغات المرافق العامة ومساعدة الموظف في فرزها. تظهر للمبلّغ نتيجة أولية ورمز متابعة. يقترح النظام التصنيف والأولوية والمعلومات الناقصة والتشابه المحتمل؛ يراجع الموظف التوصية ويتخذ القرار بنفسه.
+## Local demo
 
-## Run locally
-
-Requires Python 3.10–3.13, [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.com/). From the repository root:
+Requires Python 3.10–3.13, [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.com/) with `qwen3:4b-instruct` and `nomic-embed-text` pulled. From the repository root, in separate terminals where indicated:
 
 ```powershell
 ollama pull qwen3:4b-instruct
 ollama pull nomic-embed-text
 uv sync --locked
 uv run python scripts/setup_local.py
-uv run python scripts/seed_demo.py
+uv run python -m balagh.staff_admin create-user --username admin --role admin
 uv run flask --app app run --host 127.0.0.1
 ```
 
-`setup_local.py` creates a private `.env` with random local credentials and prints the staff access code. It refuses to replace an existing `.env`. The seed command adds one clearly synthetic report and is safe to rerun. The site starts at `http://127.0.0.1:5000/citizen/`; staff sign in at `http://127.0.0.1:5000/staff/login`. The server is bound to localhost by default. Set `LANGCHAIN_TRACING_V2=true` and a LangSmith API key only if you intentionally want external tracing; there is no saved live LangSmith trace in this repository.
+In another terminal:
 
-If Ollama is unavailable, citizen submission, rules-based triage, staff status updates, history, and tracking still work. The AI review button shows an error with recovery instructions. Do not describe the rules result as a live model result.
+```powershell
+uv run python -m balagh.worker
+```
 
-## Architecture and boundaries
+Open `http://127.0.0.1:5000/citizen/` and `http://127.0.0.1:5000/staff/login`. `create-user` prompts for a password without placing it in shell history. `setup_local.py` creates a secret in ignored `.env` and never replaces an existing file. `scripts/seed_demo.py` adds synthetic data. Submit only synthetic reports in a demo.
 
-`src/balagh/citizen_routes.py` and `staff_routes.py` are Flask routes; `database.py` stores local SQLite reports, recommendations, and history. `triage.py` applies deterministic Arabic/English keyword and location rules. `agents.py` runs a LangGraph Functional API workflow: read-only tools, retrieval from three local notes (`knowledge.py`), a model audit worker chosen by the rules category, a rules-built action plan, `interrupt()` for staff review, and `Command(resume=...)` for the staff decision. The attached notes link to Balady, the Saudi Road Code library, and Riyadh 940; retrieval does not prove that every generated claim is supported by a source.
+If the model is unavailable, intake still saves the report and tracking code. The queued job retries up to three times and then becomes a human classification task; no keyword category is passed off as model output. The app starts with automatic, additive SQLite migration from legacy records to schema 3. Historical legacy decisions stay unchanged and are shown as historical records.
 
-The checkpoint and cross-thread memory are process-local. After a restart, a pending draft cannot be resumed. The app fails without saving the staff decision; staff can explicitly discard that stale draft and generate a new one. The discard is audited and leaves case status unchanged. For a real deployment, use durable workflow storage, individual staff accounts, appropriate access controls, and an agreed data policy before using real reports.
+## Current workflow
 
-The current prototype has no government integration, maps, SMS, service-level promise, automatic duplicate closure, or delegated department authority. Category and department labels are prototype suggestions. Demo records are synthetic. Never enter real personal reports into a public demo.
+The versioned catalog in `config/catalog.v1.json` defines labels and categories separately from pilot city queues. The model proposes category IDs, exact evidence spans, rationale, uncertainty, missing information, and risk signals. Exact spans and all fields are validated. A deterministic safety signal can raise urgent review independently; it does not prove an event occurred. The model proposal, safety assessment, staff decision, status event, and audit history are separate records. A possible duplicate remains a suggestion; staff may confirm it, and no case is automatically merged or closed.
 
-## Verify
+Citizen tracking shows receipt and staff-reviewed status without presenting a pending proposal as approved. The staff view separates the raw report, proposal, evidence, safety, sources, duplicate candidates, and final decision. An admin-only diagnostics view contains technical fields. Optional coordinates are bounded to configured pilot city boxes; a text-only location is accepted. Image upload validates, decodes, and re-encodes JPEG, PNG, or WebP. This is not image understanding.
+
+## Verify and operate
 
 ```powershell
 uv run python -m unittest discover -s tests -q
-uv run python scripts/evaluate_rules.py
-uv run python scripts/smoke_real_ollama.py
+uv run python scripts/compare_triage.py
+uv run python -m balagh.privacy --days 365
 ```
 
-The unit suite includes mocked model workflows; the smoke script uses the configured local Ollama models on an isolated synthetic SQLite database and performs a staff rejection. It prints timing and the complete output so unsupported details can be inspected. See [SAIF preparation and measured results](docs/SAIF_2026.md) and [evaluation cases](evaluation/arabic_cases.json). No production accuracy or operational impact is established by these small tests.
+The comparison uses 36 synthetic author-labelled Arabic cases; independent expert review is pending. The frozen set is separate from demo data. See [evaluation](docs/EVALUATION.md), [operations, migration, backup and deployment](docs/V3_OPERATIONS.md), and the [historical SAIF preparation pack](docs/SAIF_2026.md).
+
+BALAGH is **not ready for real citizen reports**. Independent category and safety review, privacy and security review, source validation, operational ownership, incident handling, TLS and infrastructure verification, and a municipal partner agreement remain necessary. See the precise release gate in the operations guide.

@@ -1,0 +1,1074 @@
+{
+  "dataset_sha256": "4f8d4e8ea23296d550340c18b194a7e10df7a12951e4878e5d9ff35f14229ed8",
+  "review_status": "synthetic author labels; independent domain review pending",
+  "model_run": true,
+  "run_config": {
+    "triage_model": "qwen3:4b-instruct",
+    "embedding_model": "nomic-embed-text",
+    "catalog_version": "2026-09-30.2",
+    "prompt_version": "semantic-triage-1",
+    "schema_version": "proposal-1",
+    "source_set_version": "dd3a3bcac940bdad",
+    "source_relevance_threshold": 0.8
+  },
+  "rules_summary": {
+    "cases": 36,
+    "valid": 36,
+    "category_correct": 17,
+    "category_denominator": 36,
+    "urgent_recall": [
+      1,
+      3
+    ],
+    "urgent_false_positives": [
+      1,
+      33
+    ],
+    "special_outcome_correct": [
+      4,
+      6
+    ],
+    "mixed_issues_correct": [
+      0,
+      3
+    ],
+    "abstention_predictions": [
+      21,
+      36
+    ],
+    "duplicate_precision": [
+      0,
+      0
+    ],
+    "duplicate_recall": [
+      0,
+      1
+    ],
+    "median_ms": 1.84,
+    "p95_ms": 3.23
+  },
+  "semantic_summary": {
+    "cases": 36,
+    "valid": 35,
+    "category_correct": 29,
+    "category_denominator": 36,
+    "urgent_recall": [
+      3,
+      3
+    ],
+    "urgent_false_positives": [
+      0,
+      33
+    ],
+    "special_outcome_correct": [
+      3,
+      6
+    ],
+    "mixed_issues_correct": [
+      3,
+      3
+    ],
+    "abstention_predictions": [
+      6,
+      36
+    ],
+    "duplicate_precision": [
+      1,
+      1
+    ],
+    "duplicate_recall": [
+      1,
+      1
+    ],
+    "median_ms": 1931.74,
+    "p95_ms": 3231.02
+  },
+  "cases": [
+    {
+      "id": "A01",
+      "gold_ids": [
+        "roads_sidewalks"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.709
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 1,
+        "latency_ms": 6858.082
+      }
+    },
+    {
+      "id": "A02",
+      "gold_ids": [
+        "roads_sidewalks"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.291
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1962.832
+      }
+    },
+    {
+      "id": "A03",
+      "gold_ids": [
+        "roads_sidewalks"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.186
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 2006.497
+      }
+    },
+    {
+      "id": "A04",
+      "gold_ids": [
+        "roads_sidewalks"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 0.817
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1424.767
+      }
+    },
+    {
+      "id": "A05",
+      "gold_ids": [
+        "roads_sidewalks"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.136
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1645.011
+      }
+    },
+    {
+      "id": "A06",
+      "gold_ids": [
+        "waste_cleanliness"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.323
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "waste_cleanliness"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1633.108
+      }
+    },
+    {
+      "id": "A07",
+      "gold_ids": [
+        "waste_cleanliness"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "waste_cleanliness"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 0.917
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "waste_cleanliness",
+          "public_facilities"
+        ],
+        "outcome": "multiple_issues",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1935.339
+      }
+    },
+    {
+      "id": "A08",
+      "gold_ids": [
+        "waste_cleanliness"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.238
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "waste_cleanliness"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1741.686
+      }
+    },
+    {
+      "id": "A09",
+      "gold_ids": [
+        "waste_cleanliness"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.11
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "waste_cleanliness"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1930.697
+      }
+    },
+    {
+      "id": "A10",
+      "gold_ids": [
+        "traffic_safety"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.577
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "traffic_safety"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 2028.525
+      }
+    },
+    {
+      "id": "A11",
+      "gold_ids": [
+        "traffic_safety"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.109
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1729.158
+      }
+    },
+    {
+      "id": "A12",
+      "gold_ids": [
+        "traffic_safety"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.704
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "traffic_safety"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 1,
+        "latency_ms": 1939.885
+      }
+    },
+    {
+      "id": "A13",
+      "gold_ids": [
+        "street_lighting_electrical"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "street_lighting_electrical"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.844
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "street_lighting_electrical"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 1,
+        "latency_ms": 1991.649
+      }
+    },
+    {
+      "id": "A14",
+      "gold_ids": [
+        "street_lighting_electrical"
+      ],
+      "urgent_gold": true,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "street_lighting_electrical"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.464
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "outcome": "category",
+        "urgent": true,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1718.26
+      }
+    },
+    {
+      "id": "A15",
+      "gold_ids": [
+        "street_lighting_electrical"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.581
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "street_lighting_electrical"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 2091.554
+      }
+    },
+    {
+      "id": "A16",
+      "gold_ids": [
+        "water_drainage"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "water_drainage"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.823
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "water_drainage"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 1,
+        "latency_ms": 1783.807
+      }
+    },
+    {
+      "id": "A17",
+      "gold_ids": [
+        "water_drainage"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.372
+      },
+      "semantic": {
+        "valid": false,
+        "category_ids": [],
+        "outcome": "unavailable",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1774.762
+      },
+      "semantic_error": {
+        "state": "queued",
+        "last_error": "ValueError: Evidence is not an exact quote from the submitted report"
+      }
+    },
+    {
+      "id": "A18",
+      "gold_ids": [
+        "water_drainage"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "water_drainage"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.857
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "water_drainage"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1932.775
+      }
+    },
+    {
+      "id": "A19",
+      "gold_ids": [
+        "accessibility"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.831
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "accessibility"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1949.367
+      }
+    },
+    {
+      "id": "A20",
+      "gold_ids": [
+        "accessibility"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "accessibility"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.517
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "accessibility"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1807.612
+      }
+    },
+    {
+      "id": "A21",
+      "gold_ids": [
+        "public_facilities"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.023
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "public_facilities"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 1,
+        "latency_ms": 1756.139
+      }
+    },
+    {
+      "id": "A22",
+      "gold_ids": [
+        "public_facilities"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "public_facilities"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.985
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "public_facilities"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1963.949
+      }
+    },
+    {
+      "id": "A23",
+      "gold_ids": [
+        "noise_community"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.703
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "noise_community"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 1,
+        "latency_ms": 1716.641
+      }
+    },
+    {
+      "id": "A24",
+      "gold_ids": [
+        "noise_community"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "noise_community"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 1.839
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "noise_community"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 2080.47
+      }
+    },
+    {
+      "id": "A25",
+      "gold_ids": [
+        "waste_cleanliness",
+        "roads_sidewalks"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "waste_cleanliness"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.289
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "waste_cleanliness",
+          "roads_sidewalks"
+        ],
+        "outcome": "multiple_issues",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1714.617
+      }
+    },
+    {
+      "id": "A26",
+      "gold_ids": [
+        "street_lighting_electrical",
+        "water_drainage"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.288
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "street_lighting_electrical",
+          "water_drainage"
+        ],
+        "outcome": "multiple_issues",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 2100.973
+      }
+    },
+    {
+      "id": "A27",
+      "gold_ids": [
+        "waste_cleanliness",
+        "traffic_safety"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.005
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "waste_cleanliness",
+          "traffic_safety"
+        ],
+        "outcome": "multiple_issues",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 1,
+        "latency_ms": 1805.385
+      }
+    },
+    {
+      "id": "A28",
+      "gold_ids": [
+        "unknown"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.676
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "unknown"
+        ],
+        "outcome": "unknown",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1963.819
+      }
+    },
+    {
+      "id": "A29",
+      "gold_ids": [
+        "unknown"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.184
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "unknown"
+        ],
+        "outcome": "unknown",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1773.946
+      }
+    },
+    {
+      "id": "A30",
+      "gold_ids": [
+        "out_of_scope"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.425
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "unknown"
+        ],
+        "outcome": "unknown",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 1,
+        "latency_ms": 2255.39
+      }
+    },
+    {
+      "id": "A31",
+      "gold_ids": [
+        "out_of_scope"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.025
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "unknown"
+        ],
+        "outcome": "unknown",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1920.651
+      }
+    },
+    {
+      "id": "A32",
+      "gold_ids": [
+        "unknown"
+      ],
+      "urgent_gold": true,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 3.105
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "unknown"
+        ],
+        "outcome": "unknown",
+        "urgent": true,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 2140.245
+      }
+    },
+    {
+      "id": "A33",
+      "gold_ids": [
+        "unknown"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": true,
+        "duplicate_of": null,
+        "latency_ms": 3.229
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "out_of_scope"
+        ],
+        "outcome": "out_of_scope",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 1905.963
+      }
+    },
+    {
+      "id": "A34",
+      "gold_ids": [
+        "waste_cleanliness"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "unknown"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 2.694
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "waste_cleanliness"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 3231.02
+      }
+    },
+    {
+      "id": "A35",
+      "gold_ids": [
+        "roads_sidewalks"
+      ],
+      "urgent_gold": true,
+      "gold_duplicate_of": null,
+      "rules": {
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "urgent": true,
+        "duplicate_of": null,
+        "latency_ms": 3.142
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "roads_sidewalks"
+        ],
+        "outcome": "category",
+        "urgent": true,
+        "duplicate_of": null,
+        "source_count": 0,
+        "latency_ms": 2470.693
+      }
+    },
+    {
+      "id": "A36",
+      "gold_ids": [
+        "waste_cleanliness"
+      ],
+      "urgent_gold": false,
+      "gold_duplicate_of": "A06",
+      "rules": {
+        "category_ids": [
+          "waste_cleanliness"
+        ],
+        "urgent": false,
+        "duplicate_of": null,
+        "latency_ms": 3.798
+      },
+      "semantic": {
+        "valid": true,
+        "category_ids": [
+          "waste_cleanliness"
+        ],
+        "outcome": "category",
+        "urgent": false,
+        "duplicate_of": 6,
+        "source_count": 0,
+        "latency_ms": 1773.342
+      }
+    }
+  ],
+  "limitations": [
+    "Synthetic author labels; independent domain review pending",
+    "One run per case; model timings include local retrieval and embeddings",
+    "Staff correction rate and claim-level source support require human review"
+  ]
+}
