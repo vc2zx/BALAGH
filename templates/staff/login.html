@@ -10,15 +10,17 @@
     </div>
     <p class="eyebrow">وصول داخلي</p>
     <h1>دخول الموظف</h1>
-    <p>أدخل رمز الوصول للانتقال إلى لوحة إدارة البلاغات.</p>
+    <p>سجّل الدخول بحساب الموظف المخصص لك.</p>
 
     {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
 
     <form class="login-form" method="post">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="next" value="{{ next_url }}">
-        <label for="access_code">رمز الوصول</label>
-        <input id="access_code" name="access_code" type="password" autocomplete="current-password" required autofocus>
+        <label for="username">اسم المستخدم</label>
+        <input id="username" name="username" autocomplete="username" required autofocus>
+        <label for="password">كلمة المرور</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
         <button class="primary-button" type="submit">دخول إلى النظام</button>
     </form>
 </section>

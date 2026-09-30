@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +13,7 @@ from balagh.triage import ReportInput, TriageResult, report_similarity
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DATA_DIR = PROJECT_ROOT / "data"
+DATA_DIR = Path(os.getenv("BALAGH_DATA_DIR") or str(PROJECT_ROOT / "data"))
 DB_PATH = DATA_DIR / "balagh.db"
 ALLOWED_STATUSES = {"Open", "In Progress", "Resolved", "Closed"}
 ALLOWED_REVIEW_DECISIONS = {"Approved", "Modified", "Rejected"}
@@ -27,6 +28,7 @@ def _connect() -> sqlite3.Connection:
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 5000")
     return connection
 
 
@@ -55,8 +57,9 @@ def _ensure_column(
 
 
 def init_db() -> None:
-    """Create the V2 schema and add missing columns to a V1 database."""
+    """Create the legacy schema, then apply the explicit V3 migration once."""
     with _connection() as connection:
+        connection.execute("PRAGMA journal_mode = WAL")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS reports (
@@ -161,6 +164,20 @@ def init_db() -> None:
             """
         )
         connection.commit()
+
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        if version > 3:
+            raise RuntimeError(f"Database version {version} is newer than this app")
+        if version < 3:
+            migration = PROJECT_ROOT / "migrations" / "003_semantic.sql"
+            connection.executescript(migration.read_text(encoding="utf-8"))
+        else:
+            # Include indexes added during V3 development for databases that
+            # were initialized before the final migration file was frozen.
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_reports_title_prefix ON reports(title)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_reports_city_prefix ON reports(city)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_reports_district_prefix ON reports(district)")
+            connection.commit()
 
 
 def record_case_action(

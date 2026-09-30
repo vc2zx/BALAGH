@@ -9,7 +9,7 @@
     <h1>احتفظ برمز المتابعة</h1>
     <p class="tracking-code">{{ tracking_code }}</p>
     <p>لن تتمكن من متابعة البلاغ باستخدام رقمه الداخلي فقط.</p>
-    <p>التصنيف والأولوية أدناه اقتراح آلي أولي. يراجع الموظف البلاغ قبل أي قرار تشغيلي.</p>
+    <p>حُفظ البلاغ الأصلي. التحليل الآلي قيد الإعداد، ثم يراجعه موظف قبل اعتماد أي قرار.</p>
 </section>
 
 {% if report.emergency_warning %}
@@ -20,8 +20,7 @@
     <h2>{{ report.title }}</h2>
     <dl>
         <div><dt>رقم البلاغ</dt><dd>BLG-{{ "%05d"|format(report.id) }}</dd></div>
-        <div><dt>تصنيف مقترح</dt><dd>{{ category_ar(report.category) }}</dd></div>
-        <div><dt>أولوية مقترحة</dt><dd>{{ priority_ar(report.priority) }}</dd></div>
+        <div><dt>مرحلة البلاغ</dt><dd>تم الاستلام، والتحليل قيد الإعداد</dd></div>
         <div><dt>الموقع</dt><dd>{{ report.city }}، {{ report.district }}</dd></div>
     </dl>
 </section>

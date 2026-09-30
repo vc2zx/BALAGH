@@ -2,6 +2,9 @@
 id: S2
 title: مكتبة كود الطرق السعودي
 organization: الهيئة العامة للطرق
+origin_date: unknown
+jurisdiction: saudi_arabia
+topic: road_safety
 url: https://shc.rga.gov.sa/content/roadcodes/ar/road-code-library.html
 ---
 

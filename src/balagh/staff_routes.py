@@ -1,118 +1,31 @@
+"""Staff decisions are explicit database transactions, not model workflow resumes."""
 from __future__ import annotations
 
-import re
 import json
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, TypeVar, cast
-from urllib.parse import urlsplit
+from typing import Any, Callable
 
-from flask import (
-    Blueprint,
-    abort,
-    current_app,
-    flash,
-    redirect,
-    render_template,
-    request,
-    send_file,
-    session,
-    url_for,
-)
+from flask import (Blueprint, abort, current_app, flash, g, redirect, render_template,
+                   request, send_file, session, url_for)
 
-from balagh import database
-from balagh.auth import verify_staff_access
-from balagh.triage import ReportInput, triage_report
+from balagh import database, store
+from balagh.auth import authenticate, can_access, consume_rate_limit, get_user
+from balagh.catalog import SPECIAL_IDS, catalog, categories, category_label, queue_label
 
 
 staff_bp = Blueprint("staff", __name__, url_prefix="/staff")
-
-ViewFunction = TypeVar("ViewFunction", bound=Callable[..., Any])
-
-STATUS_LABELS = {
-    "Open": "مفتوح",
-    "In Progress": "قيد المعالجة",
-    "Resolved": "تم الحل",
-    "Closed": "مغلق",
-}
-PRIORITY_LABELS = {
-    "Low": "منخفضة",
-    "Medium": "متوسطة",
-    "High": "مرتفعة",
-    "Critical": "حرجة",
-}
-CATEGORY_LABELS = {
-    "Traffic Signs & Road Safety": "اللوحات والسلامة المرورية",
-    "Roads & Sidewalks": "الطرق والأرصفة",
-    "Waste & Cleanliness": "النفايات والنظافة",
-    "Street Lighting & Electrical": "إنارة الشوارع والكهرباء",
-    "Water & Drainage": "المياه والصرف",
-    "Accessibility": "إمكانية الوصول",
-    "Public Facilities": "المرافق العامة",
-    "Noise & Community Disturbance": "الإزعاج والمخالفات المجتمعية",
-    "Needs Human Classification": "يحتاج تصنيفًا بشريًا",
-}
-CONFIDENCE_LABELS = {
-    "High": "عالية",
-    "Medium": "متوسطة",
-    "Low": "منخفضة",
-    "None": "غير متوفرة",
-}
-DEPARTMENT_LABELS = {
-    "Traffic Signs and Road Safety": "قسم اللوحات والسلامة المرورية",
-    "Road and Sidewalk Maintenance": "قسم صيانة الطرق والأرصفة",
-    "Environmental and Cleaning Services": "قسم الخدمات البيئية والنظافة",
-    "Street Lighting and Electrical Safety": "قسم إنارة الشوارع والسلامة الكهربائية",
-    "Water and Drainage Operations": "قسم عمليات المياه والصرف",
-    "Accessibility and Inclusion Unit": "وحدة إمكانية الوصول والدمج",
-    "Public Facilities and Parks": "قسم المرافق العامة والحدائق",
-    "Community Compliance": "قسم الامتثال المجتمعي",
-    "Triage Review Queue": "مسار مراجعة التصنيف",
-}
-DECISION_LABELS = {
-    "Pending": "بانتظار المراجعة",
-    "Approved": "معتمدة",
-    "Modified": "معدلة",
-    "Rejected": "مرفوضة",
-    "Discarded": "مستبعدة بعد تعذر الاستئناف",
-}
-ACTOR_LABELS = {
-    "system": "النظام",
-    "staff": "الموظف",
-    "AI": "الذكاء الاصطناعي",
-}
-ACTION_LABELS = {
-    "Report created": "إنشاء البلاغ",
-    "Status changed": "تغيير الحالة",
-    "Recommendation generated": "إنشاء توصية",
-    "AI recommendation reviewed": "مراجعة التوصية",
-    "Triage recalculated": "إعادة الفرز الحتمي",
-    "Recommendation discarded": "استبعاد توصية معلقة",
-}
-
 RIYADH_TIMEZONE = timezone(timedelta(hours=3), name="Asia/Riyadh")
-
-
-def _staff_required(view: ViewFunction) -> ViewFunction:
-    @wraps(view)
-    def wrapped(*args: Any, **kwargs: Any):
-        if not session.get("staff_authenticated"):
-            return redirect(url_for("staff.login", next=request.path))
-        return view(*args, **kwargs)
-
-    return cast(ViewFunction, wrapped)
-
-
-def _safe_next_url(candidate: str) -> str:
-    if candidate.startswith("/staff/") and not candidate.startswith("//"):
-        return candidate
-    return url_for("staff.dashboard")
-
-
-def _records(frame) -> list[dict[str, Any]]:
-    clean = frame.astype(object).where(frame.notna(), None)
-    return clean.to_dict(orient="records")
+STATUS_LABELS = {"Open": "مفتوح", "In Progress": "قيد المعالجة", "Resolved": "تم الحل", "Closed": "مغلق"}
+PRIORITY_LABELS = {"Low": "منخفضة", "Medium": "متوسطة", "High": "مرتفعة", "Critical": "حرجة"}
+STAGE_LABELS = {"queued": "بانتظار التحليل", "running": "جارٍ التحليل", "proposed": "مقترح للمراجعة",
+                "needs_human": "مراجعة بشرية مباشرة", "legacy": "بلاغ سابق"}
+RISK_LABELS = {"unreviewed": "لم يُحسم", "possible_current": "خطر آني محتمل",
+               "historical_or_negated": "سابق أو منفي", "insufficient_information": "معلومات غير كافية"}
+DUPLICATE_LABELS = {"unreviewed": "لم يُحسم", "not_duplicate": "ليس مكررًا",
+                    "confirmed_duplicate": "تكرار أكده الموظف"}
+DECISION_LABELS = {"Approved": "اعتماد", "Corrected": "تصحيح", "Rejected": "رفض"}
 
 
 def _format_datetime(value: object) -> str:
@@ -127,77 +40,64 @@ def _format_datetime(value: object) -> str:
     return parsed.astimezone(RIYADH_TIMEZONE).strftime("%Y-%m-%d %H:%M")
 
 
-def _source_links(stored: dict[str, Any] | None) -> list[dict[str, str]]:
-    """Show only the URLs that the local retrieval recorded for this draft."""
-    if not stored:
-        return []
-    links: list[dict[str, str]] = []
-    for citation in str(stored.get("source_citations") or "").split(" | "):
-        match = re.fullmatch(r"\[(S\d+)\] (https://\S+)", citation.strip())
-        if match and urlsplit(match.group(2)).hostname:
-            links.append({"id": match.group(1), "url": match.group(2)})
-    return links
+def _staff_required(view: Callable) -> Callable:
+    @wraps(view)
+    def wrapped(*args: Any, **kwargs: Any):
+        user = get_user(int(session.get("staff_user_id", 0)))
+        if user is None:
+            session.clear()
+            return redirect(url_for("staff.login", next=request.path))
+        g.staff_user = user
+        return view(*args, **kwargs)
+    return wrapped
 
 
-def _source_evidence(stored: dict[str, Any] | None) -> list[dict[str, str]]:
-    if not stored:
-        return []
-    try:
-        raw = json.loads(stored.get("source_evidence") or "[]")
-    except (TypeError, ValueError):
-        return []
-    if not isinstance(raw, list):
-        return []
-    return [item for item in raw if isinstance(item, dict)
-            and urlsplit(str(item.get("url", ""))).scheme == "https"
-            and urlsplit(str(item.get("url", ""))).hostname]
+def _case_or_404(report_id: int, write: bool = False) -> dict:
+    case = store.case_view(report_id)
+    if case is None:
+        abort(404)
+    if not can_access(g.staff_user, case["report"]["city_id"], write):
+        abort(403)
+    return case
 
 
-def _generate_recommendation(report_id: int):
-    """Load the LangGraph workflow only when the employee requests it."""
-    from balagh.agents import generate_recommendation
-
-    return generate_recommendation(report_id, language="Arabic")
-
-
-def _resume_recommendation(thread_id: str, decision: str, reviewer_note: str):
-    """Resume the paused LangGraph run only after the employee submits a decision."""
-    from balagh.agents import resume_recommendation
-
-    return resume_recommendation(thread_id, decision, reviewer_note)
+def _safe_next(candidate: str) -> str:
+    return candidate if candidate.startswith("/staff/") and not candidate.startswith("//") else url_for("staff.dashboard")
 
 
 @staff_bp.app_context_processor
-def staff_template_helpers() -> dict[str, Any]:
-    return {
-        "status_label": lambda value: STATUS_LABELS.get(value, value),
-        "priority_label": lambda value: PRIORITY_LABELS.get(value, value),
-        "category_label": lambda value: CATEGORY_LABELS.get(value, value),
-        "confidence_label": lambda value: CONFIDENCE_LABELS.get(value, value),
-        "department_label": lambda value: DEPARTMENT_LABELS.get(value, value),
-        "decision_label": lambda value: DECISION_LABELS.get(value, value),
-        "actor_label": lambda value: ACTOR_LABELS.get(value, value),
-        "action_label": lambda value: ACTION_LABELS.get(value, value),
-        "format_datetime": _format_datetime,
-    }
+def helpers() -> dict:
+    return {"status_label": lambda value: STATUS_LABELS.get(value, value),
+            "priority_label": lambda value: PRIORITY_LABELS.get(value, value),
+            "category_label": category_label,
+            "queue_label": queue_label,
+            "risk_label": lambda value: RISK_LABELS.get(value, value),
+            "duplicate_label": lambda value: DUPLICATE_LABELS.get(value, value),
+            "decision_label": lambda value: DECISION_LABELS.get(value, value),
+            "stage_label": lambda value: STAGE_LABELS.get(value, value),
+            "format_datetime": _format_datetime}
 
 
 @staff_bp.route("/login", methods=["GET", "POST"])
 def login():
-    if session.get("staff_authenticated"):
+    if get_user(int(session.get("staff_user_id", 0))):
         return redirect(url_for("staff.dashboard"))
-
-    next_url = request.values.get("next", "")
     error = ""
-
+    next_url = request.values.get("next", "")
     if request.method == "POST":
-        code = request.form.get("access_code", "")
-        if verify_staff_access(code):
+        username = request.form.get("username", "").strip().lower()
+        identity = request.remote_addr or "unknown"
+        limited = current_app.config.get("RATE_LIMIT_ENABLED", True) and (
+            not consume_rate_limit("login-ip", identity, 12, 900) or
+            not consume_rate_limit("login-user", username, 8, 900))
+        if limited:
+            return render_template("staff/login.html", error="محاولات كثيرة. حاول لاحقًا.", next_url=next_url), 429
+        user = authenticate(username, request.form.get("password", ""))
+        if user:
             session.clear()
-            session["staff_authenticated"] = True
-            return redirect(_safe_next_url(next_url))
-        error = "رمز الوصول غير صحيح أو لم يُضبط في ملف البيئة."
-
+            session["staff_user_id"] = user["id"]
+            return redirect(_safe_next(next_url))
+        error = "بيانات الدخول غير صحيحة."
     return render_template("staff/login.html", error=error, next_url=next_url)
 
 
@@ -211,242 +111,125 @@ def logout():
 @staff_bp.get("/")
 @_staff_required
 def dashboard():
-    return render_template(
-        "staff/dashboard.html",
-        metrics=database.summary_metrics(),
-        reports=_records(database.get_reports(limit=12)),
-    )
+    city_ids = None if g.staff_user["role"] == "admin" else g.staff_user["city_ids"]
+    return render_template("staff/dashboard.html",
+                           metrics=store.dashboard_metrics(city_ids),
+                           reports=store.search_reports({}, city_ids, page_size=12))
 
 
 @staff_bp.get("/reports")
 @_staff_required
 def reports():
-    frame = database.get_reports(limit=500)
-    choices = {
-        "categories": sorted(frame["category"].dropna().unique().tolist()),
-        "priorities": sorted(frame["priority"].dropna().unique().tolist()),
-        "statuses": sorted(frame["status"].dropna().unique().tolist()),
-    }
-    filters = {
-        "q": request.args.get("q", "").strip(),
-        "category": request.args.get("category", "").strip(),
-        "priority": request.args.get("priority", "").strip(),
-        "status": request.args.get("status", "").strip(),
-    }
-
-    if filters["q"] and not frame.empty:
-        query = filters["q"]
-        text_match = (
-            frame["title"].str.contains(query, case=False, regex=False, na=False)
-            | frame["city"].str.contains(query, case=False, regex=False, na=False)
-            | frame["district"].str.contains(query, case=False, regex=False, na=False)
-        )
-        numeric_query = re.sub(r"^BLG-?", "", query, flags=re.IGNORECASE)
-        id_match = (
-            frame["id"].eq(int(numeric_query))
-            if numeric_query.isdigit()
-            else False
-        )
-        frame = frame[text_match | id_match]
-
-    for column in ("category", "priority", "status"):
-        if filters[column]:
-            frame = frame[frame[column] == filters[column]]
-
-    return render_template(
-        "staff/reports.html",
-        reports=_records(frame),
-        filters=filters,
-        choices=choices,
-    )
+    city_ids = None if g.staff_user["role"] == "admin" else g.staff_user["city_ids"]
+    filters = {key: request.args.get(key, "").strip() for key in ("q", "status", "analysis_state")}
+    page = max(request.args.get("page", 1, type=int), 1)
+    rows = store.search_reports(filters, city_ids, page, page_size=26)
+    return render_template("staff/reports.html", reports=rows[:25], filters=filters,
+                           page=page, has_next=len(rows) > 25,
+                           statuses=STATUS_LABELS, stages=STAGE_LABELS)
 
 
 @staff_bp.get("/reports/<int:report_id>")
 @_staff_required
 def review(report_id: int):
-    report = database.get_report(report_id)
-    if report is None:
-        abort(404)
+    case = _case_or_404(report_id)
+    with database._connection() as connection:
+        history = [dict(row) for row in connection.execute(
+            "SELECT created_at,actor,action,details FROM case_history WHERE report_id=? ORDER BY id DESC LIMIT 100",
+            (report_id,)).fetchall()]
+    city = catalog()["jurisdictions"].get(case["report"]["city_id"], {})
+    queue_options = sorted({catalog()["default_queue"], *city.get("queues", {}).values()})
+    return render_template("staff/review.html", case=case, report=case["report"],
+                           proposal=case["proposal"], safety=case["safety"],
+                           decision=case["decision"], duplicates=case["duplicates"],
+                           categories=[item for item in categories().values() if item["id"] != "multiple_issues"],
+                           queue_options=queue_options,
+                           history=history, statuses=STATUS_LABELS,
+                           allowed_transitions=sorted(store.STATUS_TRANSITIONS.get(case["report"]["status"], set())),
+                           user=g.staff_user)
 
-    recommendation = database.get_agent_recommendation(report_id)
-    return render_template(
-        "staff/review.html",
-        report=report,
-        recommendation=recommendation,
-        source_links=_source_links(recommendation),
-        source_evidence=_source_evidence(recommendation),
-        history=_records(database.get_case_history(report_id)),
-        statuses=list(STATUS_LABELS),
-    )
+
+@staff_bp.post("/reports/<int:report_id>/decision")
+@_staff_required
+def save_decision(report_id: int):
+    case = _case_or_404(report_id, write=True)
+    proposal = case["proposal"]
+    if proposal and proposal["status"] != "Pending":
+        flash("تمت مراجعة هذا المقترح بالفعل.", "error")
+        return redirect(url_for("staff.review", report_id=report_id))
+    if proposal is None and case["report"]["analysis_state"] != "needs_human":
+        flash("انتظر التحليل أو افتح مسار المراجعة البشرية.", "error")
+        return redirect(url_for("staff.review", report_id=report_id))
+    action = request.form.get("decision", "")
+    selected = list(dict.fromkeys(request.form.getlist("category_ids")))
+    allowed = set(categories())
+    if not selected or "multiple_issues" in selected or any(item not in allowed for item in selected) or (set(selected) & SPECIAL_IDS and len(selected) != 1):
+        flash("اختر تصنيفًا صالحًا أو نتيجة تعذر التصنيف.", "error")
+        return redirect(url_for("staff.review", report_id=report_id))
+    priority = request.form.get("priority", "")
+    queue = request.form.get("review_queue", "")
+    city = catalog()["jurisdictions"].get(case["report"]["city_id"], {})
+    allowed_queues = {catalog()["default_queue"], *city.get("queues", {}).values()}
+    if queue not in allowed_queues:
+        abort(400)
+    reason = request.form.get("reason", "").strip()
+    if action == "Rejected":
+        selected = ["unknown"]
+        queue = catalog()["default_queue"]
+        if case["safety"] and case["safety"].get("urgent_review"):
+            priority = "Critical"
+    if case["safety"] and case["safety"].get("urgent_review") and priority != "Critical" and action != "Corrected":
+        flash("خفض مؤشر السلامة يحتاج تصحيحًا معللًا من الموظف.", "error")
+        return redirect(url_for("staff.review", report_id=report_id))
+    duplicate_target = request.form.get("duplicate_of_report_id", "").strip()
+    try:
+        store.review(report_id, int(proposal["id"]) if proposal else None,
+                     int(g.staff_user["id"]), int(request.form.get("version", "-1")),
+                     action, selected, priority, queue,
+                     request.form.get("risk_review", "unreviewed"),
+                     request.form.get("duplicate_decision", "unreviewed"),
+                     int(duplicate_target) if duplicate_target else None, reason)
+    except (ValueError, TypeError) as exc:
+        flash(str(exc), "error")
+    else:
+        flash("حُفظ قرار الموظف والحقول المعتمدة في سجل منفصل.", "success")
+    return redirect(url_for("staff.review", report_id=report_id))
 
 
 @staff_bp.post("/reports/<int:report_id>/status")
 @_staff_required
 def update_status(report_id: int):
-    report = database.get_report(report_id)
-    if report is None:
-        abort(404)
-
-    new_status = request.form.get("status", "")
-    if new_status == report["status"]:
-        flash("الحالة لم تتغير.", "info")
-    else:
-        try:
-            database.update_report_status(report_id, new_status, actor="staff")
-        except ValueError:
-            flash("قيمة الحالة غير مدعومة.", "error")
-        else:
-            flash("تم تحديث الحالة وتسجيل التغيير.", "success")
-
-    return redirect(url_for("staff.review", report_id=report_id))
-
-
-@staff_bp.post("/reports/<int:report_id>/retriage")
-@_staff_required
-def retriage(report_id: int):
-    report = database.get_report(report_id)
-    if report is None:
-        abort(404)
-
-    pending = database.get_agent_recommendation(report_id)
-    if pending and pending["decision"] == "Pending":
-        flash(
-            "راجع التوصية المعلقة أو ارفضها قبل إعادة الفرز حتى لا تبقى توصية قديمة مرتبطة بنتيجة جديدة.",
-            "info",
-        )
-        return redirect(url_for("staff.review", report_id=report_id))
-
-    report_input = ReportInput(
-        title=report["title"],
-        description=report["description"],
-        city=report["city"],
-        district=report["district"],
-        landmark=report.get("landmark") or "",
-    )
-    existing = [
-        item for item in database.get_open_reports()
-        if int(item["id"]) != report_id
-    ]
-    result = triage_report(
-        report_input,
-        existing_reports=existing,
-        language=report.get("language") or "Arabic",
-    )
-    database.update_report_triage(report_id, result, actor="staff")
-    flash("أُعيد فرز البلاغ بالقواعد الحالية وسُجل التغيير في السجل.", "success")
-    return redirect(url_for("staff.review", report_id=report_id))
-
-
-@staff_bp.post("/reports/<int:report_id>/recommendations")
-@_staff_required
-def create_recommendation(report_id: int):
-    if database.get_report(report_id) is None:
-        abort(404)
-
-    stored = database.get_agent_recommendation(report_id)
-    if stored and stored["decision"] == "Pending":
-        flash(
-            "توجد توصية معلقة لهذا البلاغ وتحتاج قرار الموظف أولًا.",
-            "info",
-        )
-        return redirect(url_for("staff.review", report_id=report_id))
-
+    _case_or_404(report_id, write=True)
     try:
-        recommendation = _generate_recommendation(report_id)
-        recommendation_id = database.save_agent_recommendation(
-            report_id,
-            recommendation.triage_review,
-            recommendation.coordinator_review,
-            recommendation.final_recommendation,
-            workflow_name="langgraph-functional-capstone-v2",
-            validation_notes=getattr(recommendation, "validation_notes", ""),
-            source_citations=getattr(recommendation, "source_citations", ""),
-            source_evidence=getattr(recommendation, "source_evidence", ""),
-            workflow_thread_id=getattr(recommendation, "workflow_thread_id", ""),
-            agent_route=getattr(recommendation, "route", ""),
-            tool_calls=getattr(recommendation, "tool_calls", ""),
-        )
-    except Exception:  # LangGraph/Ollama expose different runtime exception types.
-        current_app.logger.exception("Agent recommendation failed for report %s", report_id)
-        flash("تعذر إنشاء توصية الآن. تحقق من تشغيل Ollama والنموذجين المحليين ثم أعد المحاولة؛ يبقى الفرز الأولي متاحًا للمراجعة.", "error")
+        store.change_status(report_id, int(g.staff_user["id"]),
+                            int(request.form.get("version", "-1")),
+                            request.form.get("status", ""), request.form.get("reason", ""))
+    except (ValueError, TypeError) as exc:
+        flash(str(exc), "error")
     else:
-        flash(f"تم إنشاء التوصية رقم {recommendation_id} للمراجعة البشرية.", "success")
-
+        flash("حُفظ تغيير الحالة مع اسم الموظف والسبب.", "success")
     return redirect(url_for("staff.review", report_id=report_id))
 
 
-@staff_bp.post("/reports/<int:report_id>/recommendations/<int:recommendation_id>/review")
+@staff_bp.get("/reports/<int:report_id>/diagnostics")
 @_staff_required
-def review_recommendation(report_id: int, recommendation_id: int):
-    stored = database.get_agent_recommendation(report_id)
-    if stored is None or int(stored["id"]) != recommendation_id:
-        abort(404)
-
-    decision = request.form.get("decision", "")
-    reviewer_note = request.form.get("reviewer_note", "")
-
-    if decision not in database.ALLOWED_REVIEW_DECISIONS:
-        flash("اختر قرارًا مدعومًا.", "error")
-        return redirect(url_for("staff.review", report_id=report_id))
-    if decision == "Modified" and not reviewer_note.strip():
-        flash("اكتب ملاحظة توضّح التعديل المطلوب.", "error")
-        return redirect(url_for("staff.review", report_id=report_id))
-
-    workflow_thread_id = str(stored.get("workflow_thread_id") or "").strip()
-    try:
-        if workflow_thread_id:
-            _resume_recommendation(workflow_thread_id, decision, reviewer_note)
-        database.review_agent_recommendation(
-            recommendation_id,
-            decision,
-            reviewer_note,
-            actor="staff",
-            workflow_resume_status=(
-                "completed" if workflow_thread_id else "not_applicable"
-            ),
-        )
-    except ValueError:
-        flash("تعذر تسجيل القرار؛ ربما سبق أن روجعت التوصية.", "error")
-    except RuntimeError as exc:
-        current_app.logger.warning(
-            "Recommendation %s could not resume: %s", recommendation_id, exc
-        )
-        flash("تعذر استئناف المراجعة، ربما بسبب إعادة تشغيل الخادم. لم يُسجل القرار. استبعد المسودة المعلقة ثم أنشئ توصية جديدة، أو أعد المحاولة إذا كان العطل مؤقتًا.", "error")
-    except Exception:
-        current_app.logger.exception(
-            "Recommendation workflow resume failed for recommendation %s",
-            recommendation_id,
-        )
-        flash("تعذر استئناف المراجعة، ربما بسبب إعادة تشغيل الخادم. لم يُسجل القرار. استبعد المسودة المعلقة ثم أنشئ توصية جديدة، أو أعد المحاولة إذا كان العطل مؤقتًا.", "error")
-    else:
-        flash("تم تسجيل قرار الموظف في سجل الحالة.", "success")
-
-    return redirect(url_for("staff.review", report_id=report_id))
-
-
-@staff_bp.post("/reports/<int:report_id>/recommendations/<int:recommendation_id>/discard")
-@_staff_required
-def discard_recommendation(report_id: int, recommendation_id: int):
-    stored = database.get_agent_recommendation(report_id)
-    if stored is None or int(stored["id"]) != recommendation_id:
-        abort(404)
-    if database.discard_pending_recommendation(recommendation_id):
-        flash("استُبعدت المسودة المعلقة دون اعتمادها أو تغيير حالة البلاغ. يمكنك إنشاء توصية جديدة.", "success")
-    else:
-        flash("لم تعد هذه التوصية معلقة.", "info")
-    return redirect(url_for("staff.review", report_id=report_id))
+def diagnostics(report_id: int):
+    if g.staff_user["role"] != "admin":
+        abort(403)
+    case = _case_or_404(report_id)
+    return current_app.response_class(json.dumps(case, ensure_ascii=False, indent=2,
+                                                 default=str), mimetype="application/json")
 
 
 @staff_bp.get("/reports/<int:report_id>/attachment")
 @_staff_required
 def attachment(report_id: int):
-    report = database.get_report(report_id)
-    if report is None or not report.get("attachment_path"):
+    case = _case_or_404(report_id)
+    stored = case["report"].get("attachment_path")
+    if not stored:
         abort(404)
-
     upload_dir = (database.DATA_DIR / "uploads").resolve()
-    attachment_path = Path(report["attachment_path"]).resolve()
-    if upload_dir not in attachment_path.parents or not attachment_path.is_file():
+    path = Path(stored).resolve()
+    if upload_dir not in path.parents or not path.is_file():
         abort(404)
-
-    return send_file(attachment_path)
+    return send_file(path)

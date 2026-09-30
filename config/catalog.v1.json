@@ -1,0 +1,32 @@
+{
+  "version": "2026-09-30.2",
+  "categories": [
+    {"id": "traffic_safety", "ar": "اللوحات والسلامة المرورية", "en": "Traffic signs and road safety", "definition": "Traffic signs, signals, markings, crossings, and road safety devices."},
+    {"id": "roads_sidewalks", "ar": "الطرق والأرصفة", "en": "Roads and sidewalks", "definition": "Potholes, damaged pavement, sidewalks, curbs, and road surfaces."},
+    {"id": "waste_cleanliness", "ar": "النفايات والنظافة", "en": "Waste and cleanliness", "definition": "Rubbish, litter, waste containers, and public-area cleanliness."},
+    {"id": "street_lighting_electrical", "ar": "إنارة الشوارع والكهرباء", "en": "Street lighting and electrical", "definition": "Street lamps, lighting outages, exposed wires, and public electrical assets."},
+    {"id": "water_drainage", "ar": "المياه والصرف", "en": "Water and drainage", "definition": "Water leaks, drainage, sewage, and flooding in public areas."},
+    {"id": "accessibility", "ar": "إمكانية الوصول", "en": "Accessibility", "definition": "Barriers affecting accessible use of public paths or facilities."},
+    {"id": "public_facilities", "ar": "المرافق العامة", "en": "Public facilities", "definition": "Parks, playgrounds, public furniture, and public facilities."},
+    {"id": "noise_community", "ar": "الإزعاج المجتمعي", "en": "Community disturbance", "definition": "Noise and disturbance in public places."},
+    {"id": "unknown", "ar": "غير واضح", "en": "Unknown", "definition": "Insufficient evidence to identify a supported issue."},
+    {"id": "multiple_issues", "ar": "مشكلات متعددة", "en": "Multiple issues", "definition": "Two or more distinct supported issues in one report."},
+    {"id": "out_of_scope", "ar": "خارج نطاق النموذج", "en": "Out of scope", "definition": "An issue outside the configured public-facility categories."}
+  ],
+  "jurisdictions": {
+    "riyadh": {"ar": "الرياض", "en": "Riyadh", "aliases": ["الرياض", "riyadh"], "bbox": [24.1, 46.0, 25.2, 47.4], "queues": {"traffic_safety": "traffic_review", "roads_sidewalks": "roads_review", "waste_cleanliness": "cleanliness_review", "street_lighting_electrical": "electrical_review", "water_drainage": "water_review", "accessibility": "access_review", "public_facilities": "facilities_review", "noise_community": "community_review"}},
+    "jeddah": {"ar": "جدة", "en": "Jeddah", "aliases": ["جدة", "jeddah"], "bbox": [21.1, 38.8, 22.1, 39.6], "queues": {}}
+  },
+  "default_queue": "human_triage_review",
+  "queue_labels_ar": {
+    "human_triage_review": "مراجعة فرز بشرية",
+    "traffic_review": "مراجعة السلامة المرورية",
+    "roads_review": "مراجعة الطرق والأرصفة",
+    "cleanliness_review": "مراجعة النظافة",
+    "electrical_review": "مراجعة الإنارة والكهرباء",
+    "water_review": "مراجعة المياه والصرف",
+    "access_review": "مراجعة إمكانية الوصول",
+    "facilities_review": "مراجعة المرافق",
+    "community_review": "مراجعة الإزعاج المجتمعي"
+  }
+}

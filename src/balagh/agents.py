@@ -386,14 +386,6 @@ def _apply_guardrails(
     notes: list[str] = []
     preview = context["current_rules_preview"]
 
-    if context["comparison"]["stored_category_matches_current_rules"]:
-        if audit.classification_decision != "Confirmed":
-            notes.append("Classification aligned with matching deterministic results.")
-        audit.classification_decision = "Confirmed"
-        audit.proposed_category = preview["category"]
-        audit.proposed_priority = preview["priority"]
-        audit.proposed_department = preview["department"]
-
     potential_duplicate = context.get("stored_potential_duplicate")
     if potential_duplicate:
         report_id = int(potential_duplicate["report_id"])

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import math
+import os
 import unittest
+from unittest.mock import patch
 
 from langchain_core.embeddings import Embeddings
 
@@ -15,7 +17,7 @@ from balagh.knowledge import (
 
 
 class _KeywordEmbeddings(Embeddings):
-    vocabulary = ("طريق", "لوحة", "اشارة", "بلاغ", "الرياض", "نفايات")
+    vocabulary = ("طريق", "لوحة", "اشارة", "بلاغ", "الرياض", "نفايات", "موضوع غير موجود إطلاقًا")
 
     def _vector(self, text: str) -> list[float]:
         values = [float(text.count(term)) for term in self.vocabulary]
@@ -30,6 +32,13 @@ class _KeywordEmbeddings(Embeddings):
 
 
 class KnowledgeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.threshold = patch.dict(os.environ, {"SOURCE_RELEVANCE_THRESHOLD": "0.25"})
+        self.threshold.start()
+
+    def tearDown(self) -> None:
+        self.threshold.stop()
+
     def test_documents_are_loaded_split_embedded_and_retrieved(self) -> None:
         documents = load_official_documents()
         chunks = split_official_documents(documents, chunk_size=220, chunk_overlap=30)
@@ -42,6 +51,10 @@ class KnowledgeTests(unittest.TestCase):
         self.assertTrue(results)
         self.assertEqual(results[0]["id"], "S2")
         self.assertIn("road-code-library", results[0]["url"])
+        self.assertTrue(results[0]["jurisdiction"])
+        self.assertTrue(results[0]["topic"])
+        self.assertTrue(results[0]["origin_date"])
+        self.assertEqual(knowledge_base.retrieve("موضوع غير موجود إطلاقًا"), [])
 
     def test_case_retrieval_returns_source_metadata_and_context(self) -> None:
         report = {

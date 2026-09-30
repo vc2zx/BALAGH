@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
@@ -17,6 +18,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 KNOWLEDGE_DIR = PROJECT_ROOT / "data" / "knowledge"
 _INDEX_LOCK = Lock()
 _DEFAULT_KNOWLEDGE_BASE: "OfficialKnowledgeBase | None" = None
+
+
+def source_set_version(directory: Path = KNOWLEDGE_DIR) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(directory.glob("*.md")):
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
 
 
 def _parse_front_matter(text: str) -> tuple[dict[str, str], str]:
@@ -41,6 +50,8 @@ def load_official_documents(directory: Path = KNOWLEDGE_DIR) -> list[Document]:
         metadata, body = _parse_front_matter(path.read_text(encoding="utf-8"))
         if not body:
             continue
+        if not all(metadata.get(key) for key in ("id", "url", "origin_date", "jurisdiction", "topic")):
+            raise ValueError(f"Source note {path.name} lacks governance metadata")
         metadata["source_file"] = path.name
         documents.append(Document(page_content=body, metadata=metadata))
     if not documents:
@@ -93,7 +104,8 @@ class OfficialKnowledgeBase:
     def retrieve(self, query: str, *, limit: int = 4) -> list[dict[str, str]]:
         if not query.strip():
             raise ValueError("A non-empty retrieval query is required.")
-        results = self.vector_store.similarity_search(query, k=max(1, min(limit, 8)))
+        threshold = float(os.getenv("SOURCE_RELEVANCE_THRESHOLD", "0.80"))
+        results = self.vector_store.similarity_search_with_score(query, k=max(1, min(limit, 8)))
         return [
             {
                 "id": str(document.metadata.get("id", "source")),
@@ -102,8 +114,12 @@ class OfficialKnowledgeBase:
                 "url": str(document.metadata.get("url", "")),
                 "guidance": document.page_content.strip(),
                 "source_file": str(document.metadata.get("source_file", "")),
+                "origin_date": str(document.metadata.get("origin_date", "")),
+                "jurisdiction": str(document.metadata.get("jurisdiction", "")),
+                "topic": str(document.metadata.get("topic", "")),
+                "relevance": round(float(score), 4),
             }
-            for document in results
+            for document, score in results if score >= threshold
         ]
 
 
@@ -125,7 +141,6 @@ def retrieve_official_sources(
 ) -> list[dict[str, str]]:
     """Retrieve semantic context for a stored case from the vector index."""
     facts = case_context["case_facts"]
-    preview = case_context["current_rules_preview"]
     query = " ".join(
         str(value or "")
         for value in (
@@ -133,8 +148,6 @@ def retrieve_official_sources(
             facts.get("description"),
             facts.get("city"),
             facts.get("district"),
-            preview.get("category"),
-            preview.get("department"),
         )
     )
     return (knowledge_base or get_official_knowledge_base()).retrieve(query, limit=limit)

@@ -20,6 +20,7 @@
 
 <form class="report-form" method="post" enctype="multipart/form-data" novalidate>
     <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="submission_nonce" value="{{ submission_nonce }}">
     <div class="field full-width">
         <label for="title">عنوان البلاغ</label>
         <input id="title" name="title" maxlength="120" value="{{ values.title }}" placeholder="مثال: حفرة كبيرة في الشارع" required>
@@ -44,6 +45,16 @@
         <label for="landmark">الموقع أو معلم قريب <span>اختياري</span></label>
         <input id="landmark" name="landmark" value="{{ values.landmark }}" placeholder="مثال: مقابل المدرسة أو بجوار الحديقة">
     </div>
+
+    <div class="field">
+        <label for="latitude">خط العرض <span>اختياري</span></label>
+        <input id="latitude" name="latitude" inputmode="decimal" value="{{ values.latitude }}" placeholder="24.7136">
+    </div>
+    <div class="field">
+        <label for="longitude">خط الطول <span>اختياري</span></label>
+        <input id="longitude" name="longitude" inputmode="decimal" value="{{ values.longitude }}" placeholder="46.6753">
+    </div>
+    <p class="full-width muted">يمكنك إرسال البلاغ بوصف الموقع نصيًا فقط. إذا أضفت إحداثيات، يجب أن تقع ضمن المدينة المحددة.</p>
 
     <div class="field full-width">
         <label for="attachment">صورة للمشكلة <span>اختياري</span></label>

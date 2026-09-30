@@ -1,169 +1,71 @@
 {% extends "staff/base.html" %}
-
 {% block title %}مراجعة BLG-{{ "%05d"|format(report.id) }} | بلاغ{% endblock %}
-
 {% block content %}
 <div class="breadcrumb"><a href="{{ url_for('staff.reports') }}">البلاغات</a><span>←</span><span>BLG-{{ "%05d"|format(report.id) }}</span></div>
+<section class="case-heading"><div><p class="case-id">BLG-{{ "%05d"|format(report.id) }}</p><h1>{{ report.title }}</h1>
+<p>{{ report.city }}، {{ report.district }} · {{ format_datetime(report.created_at) }}</p></div>
+<span class="pill large">{{ status_label(report.status) }}</span></section>
+{% if report.emergency_warning %}<div class="alert error" role="alert">{{ report.emergency_warning }}</div>{% endif %}
+<div class="review-layout"><div class="review-main">
+<section class="staff-panel"><div class="panel-heading"><h2>البلاغ الأصلي</h2></div><p class="long-text">{{ report.description }}</p>
+<dl class="details-grid"><div><dt>المدينة</dt><dd>{{ report.city }}</dd></div><div><dt>الحي</dt><dd>{{ report.district }}</dd></div>
+<div><dt>معلم قريب</dt><dd>{{ report.landmark or 'غير محدد' }}</dd></div><div><dt>دقة الموقع</dt><dd>{% if report.latitude is not none %}إحداثيات اختيارية: {{ report.latitude }}، {{ report.longitude }}{% else %}وصف نصي فقط؛ تحقق من الموقع قبل أي إحالة{% endif %}</dd></div></dl>
+{% if report.attachment_path %}<a class="secondary-button" href="{{ url_for('staff.attachment', report_id=report.id) }}" target="_blank">عرض الصورة الأصلية بعد التنقية</a><p class="muted">لا يحلل النموذج الصور.</p>{% endif %}</section>
 
-<section class="case-heading">
-    <div>
-        <p class="case-id">BLG-{{ "%05d"|format(report.id) }}</p>
-        <h1>{{ report.title }}</h1>
-        <p>{{ report.city }}، {{ report.district }} · {{ format_datetime(report.created_at) }}</p>
-    </div>
-    <span class="pill large status-{{ report.status|lower|replace(' ', '-') }}">{{ status_label(report.status) }}</span>
-</section>
+{% if report.intake_mode == 'legacy' %}
+<section class="staff-panel"><h2>سجل سابق محفوظ</h2><p>هذا البلاغ أُنشئ قبل ترقية التحليل الدلالي. لم تُغيّر الترقية نتيجته التاريخية.</p>
+<dl class="details-grid"><div><dt>التصنيف السابق</dt><dd>{{ report.category }}</dd></div><div><dt>الأولوية السابقة</dt><dd>{{ report.priority }}</dd></div></dl></section>
+{% else %}
+<section class="staff-panel"><div class="panel-heading"><h2>فحص السلامة المستقل</h2></div>
+{% if safety %}<p class="{{ 'alert error' if safety.urgent_review else 'muted' }}">{{ 'مراجعة عاجلة محافظة مطلوبة' if safety.urgent_review else 'لا يوجد مؤشر آني مثبت بالفحص النصي المحدود' }}. {{ safety.note }}</p>
+{% if safety.possible_hazard_terms %}<p>عبارات قد تشير لخطر: {{ safety.possible_hazard_terms|join('، ') }}. هذه عبارات في النص، وليست تأكيدًا ميدانيًا.</p>{% endif %}
+{% if safety.historical_context %}<p>يوجد سياق زمني سابق؛ تحقّق مما إذا كان الخطر ما زال قائمًا.</p>{% endif %}
+{% if safety.negated_terms %}<p>عبارات منفية: {{ safety.negated_terms|join('، ') }}</p>{% endif %}{% endif %}</section>
 
-{% if report.emergency_warning %}<div class="alert error" role="alert"><strong>تنبيه سلامة:</strong> {{ report.emergency_warning }}</div>{% endif %}
+<section class="staff-panel"><div class="panel-heading"><h2>المقترح الدلالي</h2><span>{{ stage_label(report.analysis_state) }}</span></div>
+{% if proposal %}<p class="muted">اقتراح آلي لم يُعتمد بعد. لا يتضمن رقم ثقة معايرًا.</p>
+<dl class="details-grid"><div><dt>نتيجة التصنيف</dt><dd>{% for item in proposal.content.category_ids %}{{ category_label(item) }}{{ '، ' if not loop.last else '' }}{% else %}{{ category_label(proposal.content.outcome) }}{% endfor %}</dd></div>
+<div><dt>أولوية النموذج</dt><dd>{{ priority_label(proposal.content.proposed_priority) }}</dd></div>
+<div><dt>أولوية المراجعة بعد حواجز السلامة</dt><dd>{{ priority_label(proposal.content.effective_priority) }}</dd></div>
+<div><dt>مسار مراجعة مقترح</dt><dd>{{ queue_label(proposal.content.review_queue) }}</dd></div></dl>
+<h3>مبرر المقترح</h3><p class="long-text">{{ proposal.content.rationale }}</p>
+<h3>مقتطفات حرفية من البلاغ</h3><ul>{% for span in proposal.content.evidence_spans %}<li><q>{{ span }}</q></li>{% else %}<li>لا توجد مقتطفات كافية.</li>{% endfor %}</ul>
+{% if proposal.content.uncertainty_reason %}<p><strong>عدم اليقين:</strong> {{ proposal.content.uncertainty_reason }}</p>{% endif %}
+{% if proposal.content.missing_information %}<p><strong>معلومات تحتاج تحققًا:</strong> {{ proposal.content.missing_information|join('، ') }}</p>{% endif %}
+{% if proposal.content.risk_signals %}<p><strong>إشارات اقترحها النموذج للمراجعة:</strong> {{ proposal.content.risk_signals|join('، ') }}</p>{% endif %}
+{% elif report.analysis_state == 'needs_human' %}<div class="alert info">تعذر الحصول على تحليل صالح بعد محاولات محدودة. راجع البلاغ وصنّفه يدويًا.</div>
+{% else %}<div class="empty-state">لم يصل مقترح بعد. يرجى تشغيل عامل التحليل المنفصل أو انتظار انتهاء المحاولة.</div>{% endif %}</section>
 
-<div class="review-layout">
-    <div class="review-main">
-        <section class="staff-panel case-details">
-            <div class="panel-heading"><h2>تفاصيل البلاغ</h2></div>
-            <h3>الوصف</h3>
-            <p class="long-text">{{ report.description }}</p>
+{% if duplicates %}<section class="staff-panel"><h2>بلاغات مشابهة محتملة</h2><p>تشابه آلي فقط؛ لا دمج ولا إغلاق تلقائي.</p><ul>{% for item in duplicates %}<li><a href="{{ url_for('staff.review', report_id=item.candidate_report_id) }}">BLG-{{ "%05d"|format(item.candidate_report_id) }}</a> · {{ "%.0f%%"|format(item.score * 100) }}</li>{% endfor %}</ul></section>{% endif %}
+{% if proposal and proposal.content.sources %}<section class="staff-panel"><h2>مصادر سياقية ذات صلة</h2><p>هذه مقتطفات سياقية فقط؛ لا تثبت مهلة خدمة أو اختصاصًا أو إجراءً إلزاميًا.</p>
+<ul>{% for source in proposal.content.sources %}<li><strong>{{ source.title }}</strong> · {{ source.jurisdiction }} · {{ source.topic }}<p>{{ source.guidance }}</p><a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">افتح المصدر الأصلي</a></li>{% endfor %}</ul></section>{% endif %}
+{% if proposal and not proposal.content.sources %}<section class="staff-panel"><h2>المصادر السياقية</h2><p>لم يُعثر على مصدر مناسب بدرجة الصلة المطلوبة. لا يُستنتج من ذلك حكم على البلاغ.</p></section>{% endif %}
 
-            <dl class="details-grid">
-                <div><dt>المدينة</dt><dd>{{ report.city }}</dd></div>
-                <div><dt>الحي</dt><dd>{{ report.district }}</dd></div>
-                <div><dt>معلم قريب</dt><dd>{{ report.landmark or 'غير محدد' }}</dd></div>
-                <div><dt>آخر تحديث</dt><dd>{{ format_datetime(report.updated_at) }}</dd></div>
-            </dl>
+{% if decision %}<section class="staff-panel"><h2>قرار الموظف النهائي</h2><p><strong>{{ decision.reviewer_name }}</strong> · {{ format_datetime(decision.created_at) }} · {{ decision_label(decision.decision) }}</p>
+<dl class="details-grid"><div><dt>التصنيف المعتمد</dt><dd>{% for item in decision.category_ids %}{{ category_label(item) }}{{ '، ' if not loop.last else '' }}{% endfor %}</dd></div>
+<div><dt>الأولوية</dt><dd>{{ priority_label(decision.priority) }}</dd></div><div><dt>مراجعة الخطر</dt><dd>{{ risk_label(decision.risk_review) }}</dd></div><div><dt>مسار المراجعة</dt><dd>{{ queue_label(decision.review_queue) }}</dd></div><div><dt>قرار التشابه</dt><dd>{{ duplicate_label(decision.duplicate_decision) }}{% if decision.duplicate_of_report_id %} · BLG-{{ "%05d"|format(decision.duplicate_of_report_id) }}{% endif %}</dd></div></dl>
+<p><strong>السبب:</strong> {{ decision.reason or 'اعتماد المقترح دون تغيير' }}</p></section>{% endif %}
 
-            {% if report.attachment_path %}
-            <div class="attachment-card">
-                <span>توجد صورة مرفقة مع البلاغ.</span>
-                <a class="secondary-button" href="{{ url_for('staff.attachment', report_id=report.id) }}" target="_blank">عرض الصورة</a>
-            </div>
-            {% endif %}
-        </section>
+{% if user.role != 'viewer' and report.intake_mode == 'semantic_v3' and not decision and ((proposal and proposal.status == 'Pending') or report.analysis_state == 'needs_human') %}
+<section class="staff-panel"><h2>قرار الموظف</h2><p>يمكنك اعتماد المقترح كما هو، أو تصحيح الحقول مع سبب، أو رفضه مع سبب. لا يغيّر القرار حالة المعالجة التشغيلية.</p>
+<form class="decision-form" method="post" action="{{ url_for('staff.save_decision', report_id=report.id) }}">
+<input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><input type="hidden" name="version" value="{{ report.version }}">
+<fieldset><legend>التصنيف أو التصنيفات</legend>{% for item in categories %}<label><input type="checkbox" name="category_ids" value="{{ item.id }}" {{ 'checked' if proposal and (item.id in proposal.content.category_ids or (item.id == proposal.content.outcome and item.id in ['unknown','out_of_scope'])) else '' }}> {{ item.ar }}</label>{% endfor %}</fieldset>
+<div class="field"><label for="priority">أولوية المراجعة</label><select id="priority" name="priority">{% for value,label in {'Low':'منخفضة','Medium':'متوسطة','High':'مرتفعة','Critical':'حرجة'}.items() %}<option value="{{ value }}" {{ 'selected' if proposal and proposal.content.effective_priority == value else '' }}>{{ label }}</option>{% endfor %}</select></div>
+<div class="field"><label for="review_queue">مسار المراجعة الداخلي</label><select id="review_queue" name="review_queue">{% for value in queue_options %}<option value="{{ value }}" {{ 'selected' if proposal and proposal.content.review_queue == value else '' }}>{{ queue_label(value) }}</option>{% endfor %}</select></div>
+<div class="field"><label for="risk_review">مراجعة الخطر</label><select id="risk_review" name="risk_review"><option value="unreviewed">لم يُحسم</option><option value="possible_current">خطر آني محتمل</option><option value="historical_or_negated">سابق أو منفي</option><option value="insufficient_information">معلومات غير كافية</option></select></div>
+<div class="field"><label for="duplicate_decision">قرار التشابه</label><select id="duplicate_decision" name="duplicate_decision"><option value="unreviewed">لم يُحسم</option><option value="not_duplicate">ليس مكررًا</option><option value="confirmed_duplicate">تكرار أكده الموظف</option></select></div>
+{% if duplicates %}<div class="field"><label for="duplicate_of_report_id">البلاغ المشابه المؤكد، إن وجد</label><select id="duplicate_of_report_id" name="duplicate_of_report_id"><option value="">لا يوجد</option>{% for item in duplicates %}<option value="{{ item.candidate_report_id }}">BLG-{{ "%05d"|format(item.candidate_report_id) }}</option>{% endfor %}</select></div>{% endif %}
+<fieldset><legend>نوع القرار</legend><label><input type="radio" name="decision" value="Approved" {{ 'disabled' if not proposal else '' }} required> اعتماد دون تعديل</label><label><input type="radio" name="decision" value="Corrected" required> تصحيح</label><label><input type="radio" name="decision" value="Rejected" required> رفض المقترح</label></fieldset>
+<div class="field"><label for="reason">سبب التصحيح أو الرفض</label><textarea id="reason" name="reason" rows="3" placeholder="اذكر ما لاحظه الموظف ولماذا تغيّر القرار."></textarea></div>
+<button class="primary-button" type="submit">حفظ قرار الموظف</button></form></section>{% endif %}
+{% endif %}
 
-        <section class="staff-panel">
-            <div class="panel-heading">
-                <div><p class="eyebrow">طبقة حتمية</p><h2>نتيجة الفرز الأولي</h2></div>
-                <form method="post" action="{{ url_for('staff.retriage', report_id=report.id) }}">
-                    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
-                    <button class="secondary-button" type="submit">إعادة الفرز </button>
-                </form>
-            </div>
-            <div class="triage-grid">
-                <div><span>التصنيف</span><strong>{{ category_label(report.category) }}</strong></div>
-                <div><span>ثقة التصنيف</span><strong>{{ confidence_label(report.category_confidence) }}</strong></div>
-                <div><span>الأولوية</span><strong>{{ priority_label(report.priority) }}</strong></div>
-                <div><span>مسار إحالة مقترح</span><strong>{{ department_label(report.department) }}</strong></div>
-            </div>
-            <h3>مبررات الفرز</h3>
-            <p class="long-text">{{ report.reasoning }}</p>
-            {% if report.category_evidence %}<div class="alert info"><strong>الكلمات المفتاحية المطابقة:</strong> {{ report.category_evidence }}</div>{% endif %}
-            {% if report.missing_information %}<div class="alert info"><strong>معلومات مقترح استكمالها:</strong> {{ report.missing_information }}</div>{% endif %}
-            {% if report.duplicate_of %}<div class="alert info">بلاغ مشابه محتمل: BLG-{{ "%05d"|format(report.duplicate_of) }} — نسبة التشابه {{ "%.0f%%"|format(report.duplicate_score * 100) }}</div>{% endif %}
-        </section>
-
-        <section class="staff-panel">
-            <div class="panel-heading">
-                <div><p class="eyebrow">توصية استشارية</p><h2>مراجعة الذكاء الاصطناعي</h2></div>
-                {% if not recommendation or recommendation.decision != 'Pending' %}
-                <form method="post" action="{{ url_for('staff.create_recommendation', report_id=report.id) }}">
-                    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
-                    <button class="primary-button" type="submit">تشغيل مراجعة الذكاء الاصطناعي</button>
-                </form>
-                {% else %}
-                <span class="muted">راجع التوصية المعلقة وسجّل القرار قبل إنشاء تشغيل جديد.</span>
-                {% endif %}
-            </div>
-            <p class="muted">الذكاء الاصطناعي يحلل ويقترح فقط. القرار التنفيذي يبقى بيد الموظف.</p>
-            <p class="muted">أسماء الأقسام هنا تسميات نموذجية داخلية؛ لا تعني صلاحية إحالة إلى جهة حكومية. يعتمد الموظف التوصية أو يرفضها ثم يحدّث حالة البلاغ بصورة منفصلة.</p>
-
-            {% if recommendation %}
-            <article class="recommendation-card">
-                <div class="recommendation-meta">
-                    <span class="pill decision-{{ recommendation.decision|lower }}">{{ decision_label(recommendation.decision) }}</span>
-                    <span>التوصية #{{ recommendation.id }} · {{ format_datetime(recommendation.created_at) }}</span>
-                </div>
-                {% if recommendation.workflow_thread_id %}
-                <details>
-                    <summary>دليل سير LangGraph</summary>
-                    <dl class="detail-grid compact-grid">
-                        <div><dt>المسار</dt><dd>{{ recommendation.agent_route or '—' }}</dd></div>
-                        <div><dt>حالة الاستئناف</dt><dd>{{ recommendation.workflow_resume_status }}</dd></div>
-                        <div><dt>معرّف Thread</dt><dd>{{ recommendation.workflow_thread_id }}</dd></div>
-                        <div><dt>الأدوات المختارة</dt><dd>{{ recommendation.tool_calls or 'لم يطلب النموذج أداة إضافية' }}</dd></div>
-                    </dl>
-                </details>
-                {% endif %}
-                <p class="recommendation-text">{{ recommendation.final_recommendation }}</p>
-                <details>
-                    <summary>المراجع المسترجعة والنصوص المحلية المستخدمة</summary>
-                    <p>النصوص أدناه ملاحظات محلية ملخصة من الصفحات المرتبطة، وليست إثباتًا لكل جملة في التوصية. افتح الصفحة الأصلية للتحقق.</p>
-                    {% if source_evidence %}
-                    <ul>{% for source in source_evidence %}<li><strong>[{{ source.id }}] {{ source.title }}</strong><p>{{ source.guidance }}</p><a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">فتح المصدر</a></li>{% endfor %}</ul>
-                    {% elif source_links %}
-                    <ul>{% for source in source_links %}<li>[{{ source.id }}] <a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.url }}</a></li>{% endfor %}</ul>
-                    {% else %}<p>لا توجد مراجع مسجلة لهذه التوصية؛ تحقق من الادعاءات يدويًا.</p>{% endif %}
-                </details>
-                <details><summary>مراجعة وكيل تدقيق الفرز</summary><p class="long-text">{{ recommendation.triage_review }}</p></details>
-                {% if recommendation.validation_notes %}<details><summary>سجل تحقق النظام</summary><p class="long-text">{{ recommendation.validation_notes }}</p></details>{% endif %}
-            </article>
-
-            {% if recommendation.decision == 'Pending' %}
-            {% if recommendation.workflow_thread_id %}
-            <p class="muted">إذا أُعيد تشغيل الخادم وفُقدت حالة الاستئناف، استبعد هذه المسودة وأنشئ واحدة جديدة. الاستبعاد لا يعتمد التوصية ولا يغيّر حالة البلاغ.</p>
-            <form method="post" action="{{ url_for('staff.discard_recommendation', report_id=report.id, recommendation_id=recommendation.id) }}">
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
-                <button class="secondary-button" type="submit">استبعاد المسودة المعلقة</button>
-            </form>
-            {% endif %}
-            <form class="decision-form" method="post" action="{{ url_for('staff.review_recommendation', report_id=report.id, recommendation_id=recommendation.id) }}">
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
-                <fieldset>
-                    <legend>قرار الموظف</legend>
-                    <label><input type="radio" name="decision" value="Approved" required> اعتماد</label>
-                    <label><input type="radio" name="decision" value="Modified" required> تعديل</label>
-                    <label><input type="radio" name="decision" value="Rejected" required> رفض</label>
-                </fieldset>
-                <div class="field">
-                    <label for="reviewer_note">ملاحظة القرار <span>مطلوبة عند التعديل</span></label>
-                    <textarea id="reviewer_note" name="reviewer_note" rows="4" placeholder="اكتب التعديل أو سبب الرفض عند الحاجة."></textarea>
-                </div>
-                <button class="primary-button" type="submit">تسجيل القرار</button>
-            </form>
-            {% elif recommendation.reviewer_note %}
-            <div class="review-note"><strong>ملاحظة الموظف:</strong> {{ recommendation.reviewer_note }}</div>
-            {% endif %}
-            {% else %}
-            <div class="empty-state">لم تُنشأ توصية ذكاء اصطناعي لهذا البلاغ بعد.</div>
-            {% endif %}
-        </section>
-
-        <section class="staff-panel">
-            <div class="panel-heading"><h2>سجل الحالة</h2><span>{{ history|length }} إجراء</span></div>
-            {% if history %}
-            <ol class="history-list">
-                {% for item in history %}
-                <li>
-                    <div><strong>{{ action_label(item.action) }}</strong><span>{{ actor_label(item.actor) }}</span></div>
-                    <p>{{ item.details or '—' }}</p>
-                    <time>{{ format_datetime(item.created_at) }}</time>
-                </li>
-                {% endfor %}
-            </ol>
-            {% else %}<div class="empty-state">لا يوجد سجل لهذه الحالة.</div>{% endif %}
-        </section>
-    </div>
-
-    <aside class="review-sidebar">
-        <section class="staff-panel sticky-panel">
-            <h2>تحديث الحالة</h2>
-            <form class="status-form" method="post" action="{{ url_for('staff.update_status', report_id=report.id) }}">
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
-                <label for="status">الحالة الحالية</label>
-                <select id="status" name="status">
-                    {% for value in statuses %}<option value="{{ value }}" {{ 'selected' if report.status == value else '' }}>{{ status_label(value) }}</option>{% endfor %}
-                </select>
-                <button class="primary-button" type="submit">حفظ الحالة</button>
-            </form>
-            <hr>
-        </section>
-    </aside>
-</div>
+<section class="staff-panel"><h2>سجل الأحداث</h2><ol class="history-list">{% for item in history %}<li><div><strong>{{ item.action }}</strong><span>{{ item.actor }}</span></div><p>{{ item.details }}</p><time>{{ format_datetime(item.created_at) }}</time></li>{% else %}<li>لا توجد أحداث مسجلة.</li>{% endfor %}</ol></section>
+</div><aside class="review-sidebar"><section class="staff-panel sticky-panel"><h2>حالة المعالجة</h2><p>الحالة الحالية: {{ status_label(report.status) }}</p>
+{% if user.role != 'viewer' and allowed_transitions %}<form class="status-form" method="post" action="{{ url_for('staff.update_status', report_id=report.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><input type="hidden" name="version" value="{{ report.version }}">
+<label for="status">الحالة التالية</label><select id="status" name="status">{% for value in allowed_transitions %}<option value="{{ value }}">{{ status_label(value) }}</option>{% endfor %}</select>
+<label for="status_reason">سبب التغيير</label><textarea id="status_reason" name="reason" required rows="3"></textarea><button class="primary-button" type="submit">حفظ الحالة</button></form>{% endif %}
+{% if user.role == 'admin' %}<hr><a href="{{ url_for('staff.diagnostics', report_id=report.id) }}">تفاصيل تقنية للمسؤول</a>{% endif %}
+</section></aside></div>
 {% endblock %}
