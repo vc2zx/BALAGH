@@ -31,6 +31,8 @@ The versioned catalog in `config/catalog.v1.json` defines labels and categories 
 
 Citizen tracking shows receipt and staff-reviewed status without presenting a pending proposal as approved. The staff view separates the raw report, proposal, evidence, safety, sources, duplicate candidates, and final decision. An admin-only diagnostics view contains technical fields. Optional coordinates are bounded to configured pilot city boxes; a text-only location is accepted. Image upload validates, decodes, and re-encodes JPEG, PNG, or WebP. This is not image understanding.
 
+The current Flask/worker path stores case records and audit history in SQLite. The repository also includes [LangGraph human-review workflows](src/balagh/agents.py) with in-memory checkpoints and memory stores; those graph checkpoints do not survive a process restart and are separate from SQLite case persistence.
+
 ## Verify and operate
 
 ```powershell
@@ -39,6 +41,11 @@ uv run python scripts/compare_triage.py
 uv run python -m balagh.privacy --days 365
 ```
 
-The comparison uses 36 synthetic author-labelled Arabic cases; independent expert review is pending. The frozen set is separate from demo data. See [evaluation](docs/EVALUATION.md), [operations, migration, backup and deployment](docs/V3_OPERATIONS.md), and the [historical SAIF preparation pack](docs/SAIF_2026.md).
+### Evaluation and CI evidence
+
+- [Evaluation protocol and recorded results](docs/EVALUATION.md): 36 frozen synthetic, author-labelled Arabic cases, separate from demo data. Independent expert review is pending; these are experimental diagnostics, not real-world performance estimates.
+- [Unit-test workflow and CI results](https://github.com/vc2zx/BALAGH/actions/workflows/unit-tests.yml): automated checks of application behavior, not evidence of model accuracy.
+
+See [operations, migration, backup and deployment](docs/V3_OPERATIONS.md) and the [historical SAIF preparation pack](docs/SAIF_2026.md).
 
 BALAGH is **not ready for real citizen reports**. Independent category and safety review, privacy and security review, source validation, operational ownership, incident handling, TLS and infrastructure verification, and a municipal partner agreement remain necessary. See the precise release gate in the operations guide.
